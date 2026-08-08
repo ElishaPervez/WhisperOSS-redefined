@@ -1,39 +1,38 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="stylesheet" href="styles.css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri App</title>
-    <script type="module" src="/main.js" defer></script>
-  </head>
-
-  <body>
-    <main class="container">
-      <h1>Welcome to Tauri</h1>
-
-      <div class="row">
-        <a href="https://tauri.app" target="_blank">
-          <img src="/assets/tauri.svg" class="logo tauri" alt="Tauri logo" />
-        </a>
-        <a
-          href="https://developer.mozilla.org/en-US/docs/Web/JavaScript"
-          target="_blank"
-        >
-          <img
-            src="/assets/javascript.svg"
-            class="logo vanilla"
-            alt="JavaScript logo"
-          />
-        </a>
-      </div>
-      <p>Click on the Tauri logo to learn more about the framework</p>
-
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="Enter a name..." />
-        <button type="submit">Greet</button>
-      </form>
-      <p id="greet-msg"></p>
-    </main>
-  </body>
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden;
+               -webkit-user-select: none; user-select: none; cursor: default; }
+  .pill {
+    position: fixed; inset: 0;
+    background: #0b0a0a;
+    border-radius: 18px;
+    display: flex; align-items: center; justify-content: center; gap: 3px;
+  }
+  .bar {
+    width: 3px; height: 24px; border-radius: 1.5px;
+    background: #f3f2f2;
+    transform: scaleY(0.16); transform-origin: center;
+    will-change: transform;
+  }
+  .dot {
+    position: absolute; right: 6px; top: 6px;
+    width: 4px; height: 4px; border-radius: 50%;
+    background: #3fb970;
+  }
+  .fps {
+    position: absolute; left: 6px; top: 3px;
+    font: 8px monospace; color: #7d7979;
+  }
+</style>
+</head>
+<body>
+  <div class="pill">
+    <div class="fps" id="fps"></div>
+    <div class="dot" id="dot"></div>
+  </div>
+  <script src="main.js"></script>
+</body>
 </html>

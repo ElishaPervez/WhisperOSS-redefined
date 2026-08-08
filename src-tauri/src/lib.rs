@@ -1,3 +1,4 @@
+mod demo;
 mod position;
 
 use tauri::{Manager, PhysicalPosition};
@@ -6,6 +7,7 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             position_overlay(app.handle())?;
+            demo::spawn_demo(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())
