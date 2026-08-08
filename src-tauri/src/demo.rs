@@ -2,7 +2,7 @@
 //! validated without any audio code. Replaced by the real recorder in M2.
 
 use std::{thread, time::Duration};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Deterministic pseudo-random 0.0..1.0 (no rand dependency).
 fn lcg_next(state: &mut u32) -> f64 {
@@ -16,15 +16,34 @@ pub fn synth_level(t: f64, jitter: f64) -> f64 {
     (envelope + 0.25 * (jitter - 0.5)).clamp(0.0, 1.0)
 }
 
-/// Emit `"level"` events at 30 Hz forever.
+/// Emit `"level"` at 30 Hz forever, and every 5 s flip the overlay between
+/// click-through (clicks land on the window behind) and clickable.
 pub fn spawn_demo(app: AppHandle) {
     thread::spawn(move || {
         let mut t = 0.0_f64;
         let mut rng = 0x2026_0808_u32;
+        let mut click_through = true;
+        let mut ticks: u64 = 0;
+
+        if let Some(w) = app.get_webview_window("overlay") {
+            let _ = w.set_ignore_cursor_events(click_through);
+        }
+        let _ = app.emit("clickthrough", click_through);
+
         loop {
             t += 1.0 / 30.0;
+            ticks += 1;
             let level = synth_level(t, lcg_next(&mut rng));
             let _ = app.emit("level", level);
+
+            if ticks % 150 == 0 {
+                // 150 ticks at 30 Hz = 5 s
+                click_through = !click_through;
+                if let Some(w) = app.get_webview_window("overlay") {
+                    let _ = w.set_ignore_cursor_events(click_through);
+                }
+                let _ = app.emit("clickthrough", click_through);
+            }
             thread::sleep(Duration::from_millis(33));
         }
     });
