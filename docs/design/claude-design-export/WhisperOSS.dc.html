@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="_ds/modernist-004a60a8-d2ba-445b-8715-9131d459e452/styles.css">
+<script src="_ds/modernist-004a60a8-d2ba-445b-8715-9131d459e452/_ds_bundle.js"></script>
+<style>
+  body { margin:0; background:#e9e7e5; }
+  a { color: var(--color-accent); }
+  a:hover { color: var(--color-accent-700); }
+  @keyframes wobble { 0%,100% { transform: scaleY(0.22) } 50% { transform: scaleY(1) } }
+  @keyframes shim { 0% { background-position: 140% 0 } 100% { background-position: -40% 0 } }
+  @keyframes pop { 0% { transform: scale(0.5); opacity: 0 } 45% { transform: scale(1.1); opacity: 1 } 60% { transform: scale(1); opacity: 1 } 100% { transform: scale(1); opacity: 1 } }
+  @keyframes fadeout { 0%,60% { opacity: 1 } 100% { opacity: 0 } }
+</style>
+</helmet>
+
+<section style="padding:72px 72px 120px;display:flex;flex-direction:column;gap:96px;font-family:var(--font-body);color:var(--color-text)">
+
+  <div data-screen-label="Artboard 1 — Settings">
+    <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:8px">
+      <span style="font-family:var(--font-heading);font-weight:800;font-size:12px;letter-spacing:0.16em;background:var(--color-accent);color:#fff;padding:4px 8px">1A</span>
+      <h2 style="font-size:26px;margin:0">Settings window — 960 × 640</h2>
+      <span style="font-size:13px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Frameless, acrylic, the only window in the app. Dark and light.</span>
+    </div>
+    <div style="height:2px;background:var(--color-divider);margin-bottom:40px"></div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:40px">
+
+      <div style="padding:56px;background:linear-gradient(140deg,#2c2a28 0%,#141312 60%,#1e1c1b 100%)">
+        <div style="font-size:11px;letter-spacing:0.18em;font-weight:700;color:rgba(255,255,255,0.5);margin-bottom:20px">DARK</div>
+        <div style="--color-bg:#191817;--color-surface:#232120;--color-text:#f3f2f2;--color-accent:#ff563c;--color-divider:color-mix(in srgb, #f3f2f2 30%, transparent);width:960px;height:640px;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;font-family:var(--font-body);color:var(--color-text);background:color-mix(in srgb, var(--color-bg) 84%, transparent);backdrop-filter:blur(40px) saturate(1.5);-webkit-backdrop-filter:blur(40px) saturate(1.5);border:1px solid color-mix(in srgb, #f3f2f2 14%, transparent);box-shadow:0 40px 90px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.3)">
+
+          <div style="height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding-left:20px">
+            <div style="display:flex;align-items:center;gap:11px">
+              <div style="width:9px;height:9px;background:var(--color-accent)"></div>
+              <div style="font-family:var(--font-heading);font-weight:800;font-size:11px;letter-spacing:0.2em">WHISPEROSS</div>
+            </div>
+            <div style="display:flex">
+              <div style="width:46px;height:44px;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb, var(--color-text) 70%, transparent)"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 6h10"/></svg></div>
+              <div style="width:46px;height:44px;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb, var(--color-text) 70%, transparent)"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9"/></svg></div>
+            </div>
+          </div>
+
+          <div style="padding:32px 48px 26px;flex:none">
+            <div style="font-size:11px;letter-spacing:0.18em;font-weight:700;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-bottom:18px">GLOBAL HOTKEY</div>
+            <div style="font-family:var(--font-heading);font-weight:800;font-size:30px;letter-spacing:-0.02em;display:flex;align-items:center;gap:11px;flex-wrap:wrap">
+              <span>Hold</span>
+              <span style="border:2px solid var(--color-divider);padding:2px 12px;font-size:23px">Ctrl</span>
+              <span style="font-size:22px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">+</span>
+              <span style="border:2px solid var(--color-divider);padding:2px 12px;font-size:23px">Win</span>
+              <span>— speak — release</span>
+            </div>
+            <button class="btn btn-secondary" style="margin-top:20px;font-size:12px;padding:7px 13px">Change hotkey</button>
+          </div>
+          <div style="height:2px;background:var(--color-divider);flex:none"></div>
+
+          <div style="flex:1;display:flex;flex-direction:column;padding:0 48px">
+
+            <div style="flex:1.28;display:flex;align-items:center;justify-content:space-between;gap:24px">
+              <div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:15px">Groq API key</div>
+                <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">Stored locally on this PC</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input class="input" type="text" value="••••••••••••••••••••••••" readonly style="width:232px;font-size:13px;letter-spacing:0.06em">
+                <button class="btn btn-secondary" style="padding:9px 10px" title="Show key"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg></button>
+                <button class="btn btn-primary" style="padding:9px 16px">Save</button>
+              </div>
+            </div>
+
+            <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent)">
+              <div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:15px">AI formatting</div>
+                <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">Cleans punctuation and paragraph breaks</div>
+              </div>
+              <div style="width:48px;height:26px;border:2px solid var(--color-accent);background:var(--color-accent);display:flex;align-items:center;justify-content:flex-end;padding:2px"><div style="width:18px;height:18px;background:var(--color-bg)"></div></div>
+            </div>
+
+            <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent)">
+              <div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:15px">Casual mode</div>
+                <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">Lowercase, light emoji</div>
+              </div>
+              <div style="width:48px;height:26px;border:2px solid var(--color-divider);display:flex;align-items:center;justify-content:flex-start;padding:2px"><div style="width:18px;height:18px;background:color-mix(in srgb, var(--color-text) 45%, transparent)"></div></div>
+            </div>
+
+            <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent)">
+              <div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:15px">Microphone</div>
+                <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">Input device used while dictating</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:232px;border:1px solid var(--color-divider);padding:9px 12px;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+                  <span>Yeti Nano (USB)</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l7 7 7-7"/></svg>
+                </div>
+                <button class="btn btn-secondary" style="padding:9px 10px" title="Rescan devices"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3.5V10h-6.5"/></svg></button>
+              </div>
+            </div>
+
+            <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent)">
+              <div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:15px">Theme</div>
+                <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">Follows Windows by default</div>
+              </div>
+              <div style="display:flex;border:1px solid var(--color-divider)">
+                <div style="padding:8px 18px;font-size:13px;font-weight:700;font-family:var(--font-heading);background:var(--color-text);color:var(--color-bg)">Auto</div>
+                <div style="padding:8px 18px;font-size:13px;border-left:1px solid var(--color-divider)">Light</div>
+                <div style="padding:8px 18px;font-size:13px;border-left:1px solid var(--color-divider)">Dark</div>
+              </div>
+            </div>
+
+            <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent)">
+              <div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:15px">Start with Windows</div>
+                <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">Runs quietly in the tray</div>
+              </div>
+              <div style="width:48px;height:26px;border:2px solid var(--color-accent);background:var(--color-accent);display:flex;align-items:center;justify-content:flex-end;padding:2px"><div style="width:18px;height:18px;background:var(--color-bg)"></div></div>
+            </div>
+          </div>
+
+          <div style="height:46px;flex:none;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent);display:flex;align-items:center;justify-content:space-between;padding:0 48px;font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;background:var(--color-accent);display:block"></span>Groq connected · Microphone OK</div>
+            <div>v1.0</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:56px;background:linear-gradient(140deg,#d9d6d3 0%,#a9a5a2 60%,#c4c0bd 100%)">
+        <div style="font-size:11px;letter-spacing:0.18em;font-weight:700;color:rgba(32,30,29,0.55);margin-bottom:20px">LIGHT</div>
+        <div style="--color-bg:#f8f7f7;--color-surface:#eae9e9;--color-text:#201e1d;--color-accent:#ec3013;--color-divider:color-mix(in srgb, #201e1d 32%, transparent);width:960px;height:640px;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;font-family:var(--font-body);color:var(--color-text);background:color-mix(in srgb, var(--color-bg) 82%, transparent);backdrop-filter:blur(40px) saturate(1.5);-webkit-backdrop-filter:blur(40px) saturate(1.5);border:1px solid color-mix(in srgb, #201e1d 18%, transparent);box-shadow:0 40px 90px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)">
+
+          <div style="height:44px;flex:none;display:flex;align-items:center;justify-content:space-between;padding-left:20px">
+            <div style="display:flex;align-items:center;gap:11px">
+              <div style="width:9px;height:9px;background:var(--color-accent)"></div>
+              <div style="font-family:var(--font-heading);font-weight:800;font-size:11px;letter-spacing:0.2em">WHISPEROSS</div>
+            </div>
+            <div style="display:flex">
+              <div style="width:46px;height:44px;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb, var(--color-text) 70%, transparent)"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 6h10"/></svg></div>
+              <div style="width:46px;height:44px;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb, var(--color-text) 70%, transparent)"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9"/></svg></div>
+            </div>
+          </div>
+
+          <div style="padding:32px 48px 26px;flex:none">
+            <div style="font-size:11px;letter-spacing:0.18em;font-weight:700;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-bottom:18px">GLOBAL HOTKEY</div>
+            <div style="font-family:var(--font-heading);font-weight:800;font-size:30px;letter-spacing:-0.02em;display:flex;align-items:center;gap:11px;flex-wrap:wrap">
+              <span>Hold</span>
+              <span style="border:2px solid var(--color-divider);padding:2px 12px;font-size:23px">Ctrl</span>
+              <span style="font-size:22px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">+</span>
+              <span style="border:2px solid var(--color-divider);padding:2px 12px;font-size:23px">Win</span>
+              <span>— speak — release</span>
+            </div>
+            <button class="btn btn-secondary" style="margin-top:20px;font-size:12px;padding:7px 13px">Change hotkey</button>
+          </div>
+          <div style="height:2px;background:var(--color-divider);flex:none"></div>
+
+          <div style="flex:1;display:flex;flex-direction:column;padding:0 48px">
+
+            <div style="flex:1.28;display:flex;align-items:center;justify-content:space-between;gap:24px">
+              <div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:15px">Groq API key</div>
+                <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">Stored locally on this PC</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <input class="input" type="text" value="gsk_7Qd2••••••••••••••" readonly style="width:232px;font-size:13px;letter-spacing:0.04em">
+                <button class="btn btn-secondary" style="padding:9px 10px" title="Hide key"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/><path d="M3 21L21 3"/></svg></button>
+                <button class="btn btn-primary" style="padding:9px 16px">Save</button>
+              </div>
+            </div>
+
+            <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent)">
+              <div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:15px">AI formatting</div>
+                <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">Cleans punctuation and paragraph breaks</div>
+              </div>
+              <div style="width:48px;height:26px;border:2px solid var(--color-accent);background:var(--color-accent);display:flex;align-items:center;justify-content:flex-end;padding:2px"><div style="width:18px;height:18px;background:var(--color-bg)"></div></div>
+            </div>
+
+            <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent)">
+              <div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:15px">Casual mode</div>
+                <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">Lowercase, light emoji</div>
+              </div>
+              <div style="width:48px;height:26px;border:2px solid var(--color-divider);display:flex;align-items:center;justify-content:flex-start;padding:2px"><div style="width:18px;height:18px;background:color-mix(in srgb, var(--color-text) 45%, transparent)"></div></div>
+            </div>
+
+            <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent)">
+              <div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:15px">Microphone</div>
+                <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">Input device used while dictating</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="width:232px;border:1px solid var(--color-divider);padding:9px 12px;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+                  <span>Yeti Nano (USB)</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l7 7 7-7"/></svg>
+                </div>
+                <button class="btn btn-secondary" style="padding:9px 10px" title="Rescan devices"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3.5V10h-6.5"/></svg></button>
+              </div>
+            </div>
+
+            <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent)">
+              <div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:15px">Theme</div>
+                <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">Follows Windows by default</div>
+              </div>
+              <div style="display:flex;border:1px solid var(--color-divider)">
+                <div style="padding:8px 18px;font-size:13px">Auto</div>
+                <div style="padding:8px 18px;font-size:13px;font-weight:700;font-family:var(--font-heading);background:var(--color-text);color:var(--color-bg);border-left:1px solid var(--color-divider)">Light</div>
+                <div style="padding:8px 18px;font-size:13px;border-left:1px solid var(--color-divider)">Dark</div>
+              </div>
+            </div>
+
+            <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:24px;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent)">
+              <div>
+                <div style="font-family:var(--font-heading);font-weight:800;font-size:15px">Start with Windows</div>
+                <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:3px">Runs quietly in the tray</div>
+              </div>
+              <div style="width:48px;height:26px;border:2px solid var(--color-accent);background:var(--color-accent);display:flex;align-items:center;justify-content:flex-end;padding:2px"><div style="width:18px;height:18px;background:var(--color-bg)"></div></div>
+            </div>
+          </div>
+
+          <div style="height:46px;flex:none;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent);display:flex;align-items:center;justify-content:space-between;padding:0 48px;font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">
+            <div style="display:flex;align-items:center;gap:10px"><span style="width:7px;height:7px;background:var(--color-accent);display:block"></span>Groq connected · Microphone OK</div>
+            <div>v1.0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div data-screen-label="Artboard 2 — Overlay pill">
+    <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:8px">
+      <span style="font-family:var(--font-heading);font-weight:800;font-size:12px;letter-spacing:0.16em;background:var(--color-accent);color:#fff;padding:4px 8px">1B</span>
+      <h2 style="font-size:26px;margin:0">Overlay pill — 120 × 36</h2>
+      <span style="font-size:13px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Always on top, bottom centre. Shown at actual size; identical in both themes.</span>
+    </div>
+    <div style="height:2px;background:var(--color-divider);margin-bottom:40px"></div>
+
+    <div style="padding:56px;background:linear-gradient(140deg,#2c2a28 0%,#141312 60%,#1e1c1b 100%);display:flex;flex-direction:column;gap:52px">
+      <div style="display:flex;gap:44px;flex-wrap:wrap">
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="width:120px;height:36px;border-radius:18px;background:rgba(16,15,14,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.12);box-shadow:0 8px 24px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;gap:3px">
+            <span style="display:block;width:2px;height:18px;background:#fff;transform-origin:center;animation:wobble 0.9s ease-in-out infinite;animation-delay:0s"></span>
+            <span style="display:block;width:2px;height:18px;background:#fff;transform-origin:center;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.08s"></span>
+            <span style="display:block;width:2px;height:18px;background:#fff;transform-origin:center;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.22s"></span>
+            <span style="display:block;width:2px;height:18px;background:#fff;transform-origin:center;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.36s"></span>
+            <span style="display:block;width:2px;height:18px;background:#fff;transform-origin:center;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.14s"></span>
+            <span style="display:block;width:2px;height:18px;background:#fff;transform-origin:center;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.44s"></span>
+            <span style="display:block;width:2px;height:18px;background:#fff;transform-origin:center;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.3s"></span>
+            <span style="display:block;width:2px;height:18px;background:#fff;transform-origin:center;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.06s"></span>
+            <span style="display:block;width:2px;height:18px;background:#fff;transform-origin:center;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.5s"></span>
+            <span style="display:block;width:2px;height:18px;background:#fff;transform-origin:center;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.18s"></span>
+            <span style="display:block;width:2px;height:18px;background:#fff;transform-origin:center;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.4s"></span>
+            <span style="display:block;width:2px;height:18px;background:#fff;transform-origin:center;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.26s"></span>
+          </div>
+          <div>
+            <div style="font-family:var(--font-heading);font-weight:800;font-size:12px;letter-spacing:0.16em;color:#fff">LISTENING</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;max-width:190px">12 bars, live input level</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="width:120px;height:36px;border-radius:18px;background:rgba(16,15,14,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.12);box-shadow:0 8px 24px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center">
+            <span style="font-family:var(--font-heading);font-weight:800;font-size:11px;letter-spacing:0.14em;background-image:linear-gradient(90deg, rgba(255,255,255,0.28) 0%, #ffffff 45%, rgba(255,255,255,0.28) 90%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shim 1.6s linear infinite">PROCESSING</span>
+          </div>
+          <div>
+            <div style="font-family:var(--font-heading);font-weight:800;font-size:12px;letter-spacing:0.16em;color:#fff">PROCESSING</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;max-width:190px">Shimmer sweeps left, 1.6s loop</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="width:120px;height:36px;border-radius:18px;background:rgba(16,15,14,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.12);box-shadow:0 8px 24px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="square" style="animation:pop 1.8s ease-out infinite"><path d="M4 12.5l5 5L20 6.5"/></svg>
+          </div>
+          <div>
+            <div style="font-family:var(--font-heading);font-weight:800;font-size:12px;letter-spacing:0.16em;color:#fff">SUCCESS</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;max-width:190px">Check pops in, holds 400ms, fades</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="width:120px;height:36px;border-radius:18px;background:rgba(174,24,0,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,120,100,0.35);box-shadow:0 8px 24px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center">
+            <span style="font-family:var(--font-heading);font-weight:800;font-size:11px;letter-spacing:0.06em;color:#fff">No mic detected</span>
+          </div>
+          <div>
+            <div style="font-family:var(--font-heading);font-weight:800;font-size:12px;letter-spacing:0.16em;color:#fff">ERROR</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;max-width:190px">Red field, 2s, then fades</div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="width:120px;height:36px;border-radius:18px;border:1px dashed rgba(255,255,255,0.22);display:flex;align-items:center;justify-content:center;animation:fadeout 2.4s ease-in-out infinite">
+            <span style="font-size:11px;color:rgba(255,255,255,0.3)">—</span>
+          </div>
+          <div>
+            <div style="font-family:var(--font-heading);font-weight:800;font-size:12px;letter-spacing:0.16em;color:rgba(255,255,255,0.55)">IDLE</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;max-width:190px">Nothing on screen — fades out over 240ms</div>
+          </div>
+        </div>
+      </div>
+
+      <sc-if value="{{ showPlacement }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="height:2px;background:rgba(255,255,255,0.18);margin-bottom:28px"></div>
+          <div style="font-size:11px;letter-spacing:0.18em;font-weight:700;color:rgba(255,255,255,0.5);margin-bottom:20px">PLACEMENT</div>
+          <div style="width:960px;height:240px;border-radius:8px;overflow:hidden;position:relative;background:linear-gradient(180deg,#3a3735 0%,#232120 100%);border:1px solid rgba(255,255,255,0.1)">
+            <div style="position:absolute;left:56px;top:44px;font-size:15px;color:rgba(255,255,255,0.42);font-family:var(--font-body)">Reply to Marta —<span style="display:inline-block;width:2px;height:17px;background:rgba(255,255,255,0.6);vertical-align:-3px;margin-left:6px"></span></div>
+            <div style="position:absolute;left:0;right:0;bottom:74px;display:flex;justify-content:center">
+              <div style="width:120px;height:36px;border-radius:18px;background:rgba(16,15,14,0.92);border:1px solid rgba(255,255,255,0.12);box-shadow:0 8px 24px rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;gap:3px">
+                <span style="display:block;width:2px;height:18px;background:#fff;animation:wobble 0.9s ease-in-out infinite;animation-delay:0s"></span>
+                <span style="display:block;width:2px;height:18px;background:#fff;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.12s"></span>
+                <span style="display:block;width:2px;height:18px;background:#fff;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.3s"></span>
+                <span style="display:block;width:2px;height:18px;background:#fff;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.42s"></span>
+                <span style="display:block;width:2px;height:18px;background:#fff;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.2s"></span>
+                <span style="display:block;width:2px;height:18px;background:#fff;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.5s"></span>
+                <span style="display:block;width:2px;height:18px;background:#fff;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.34s"></span>
+                <span style="display:block;width:2px;height:18px;background:#fff;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.06s"></span>
+                <span style="display:block;width:2px;height:18px;background:#fff;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.46s"></span>
+                <span style="display:block;width:2px;height:18px;background:#fff;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.16s"></span>
+                <span style="display:block;width:2px;height:18px;background:#fff;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.38s"></span>
+                <span style="display:block;width:2px;height:18px;background:#fff;animation:wobble 0.9s ease-in-out infinite;animation-delay:0.26s"></span>
+              </div>
+            </div>
+            <div style="position:absolute;left:0;right:0;bottom:0;height:48px;background:rgba(12,11,10,0.75);border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;gap:22px">
+              <div style="width:18px;height:18px;background:rgba(255,255,255,0.22)"></div>
+              <div style="width:18px;height:18px;background:rgba(255,255,255,0.22)"></div>
+              <div style="width:18px;height:18px;background:rgba(255,255,255,0.22)"></div>
+            </div>
+          </div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:14px">Centred horizontally, 26px above the taskbar. Click-through, never steals focus.</div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <div data-screen-label="Artboard 3 — First run">
+    <div style="display:flex;align-items:baseline;gap:16px;margin-bottom:8px">
+      <span style="font-family:var(--font-heading);font-weight:800;font-size:12px;letter-spacing:0.16em;background:var(--color-accent);color:#fff;padding:4px 8px">1C</span>
+      <h2 style="font-size:26px;margin:0">First run — two steps</h2>
+      <span style="font-size:13px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Same shell. Welcome, then the key — with its invalid state.</span>
+    </div>
+    <div style="height:2px;background:var(--color-divider);margin-bottom:40px"></div>
+
+    <div style="display:flex;flex-wrap:wrap;gap:40px">
+
+      <div style="padding:56px;background:linear-gradient(140deg,#2c2a28 0%,#141312 60%,#1e1c1b 100%)">
+        <div style="font-size:11px;letter-spacing:0.18em;font-weight:700;color:rgba(255,255,255,0.5);margin-bottom:20px">STEP 1 — DARK</div>
+        <div style="--color-bg:#191817;--color-surface:#232120;--color-text:#f3f2f2;--color-accent:#ff563c;--color-divider:color-mix(in srgb, #f3f2f2 30%, transparent);width:960px;height:640px;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;font-family:var(--font-body);color:var(--color-text);background:color-mix(in srgb, var(--color-bg) 84%, transparent);backdrop-filter:blur(40px) saturate(1.5);-webkit-backdrop-filter:blur(40px) saturate(1.5);border:1px solid color-mix(in srgb, #f3f2f2 14%, transparent);box-shadow:0 40px 90px rgba(0,0,0,0.45)">
+          <div style="height:44px;flex:none;display:flex;align-items:center;justify-content:flex-end">
+            <div style="width:46px;height:44px;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb, var(--color-text) 70%, transparent)"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9"/></svg></div>
+          </div>
+          <div style="flex:1;padding:0 80px;display:flex;flex-direction:column;justify-content:center">
+            <div style="width:14px;height:14px;background:var(--color-accent);margin-bottom:32px"></div>
+            <h1 style="font-size:72px;margin:0;letter-spacing:-0.03em">WhisperOSS</h1>
+            <div style="font-family:var(--font-heading);font-weight:800;font-size:30px;letter-spacing:-0.02em;color:color-mix(in srgb, var(--color-text) 62%, transparent);margin-top:6px">Speak anywhere.</div>
+            <div style="height:2px;background:var(--color-divider);margin:40px 0 28px;width:420px"></div>
+            <p style="font-size:16px;line-height:1.6;max-width:520px;color:color-mix(in srgb, var(--color-text) 72%, transparent)">Hold <strong style="font-weight:800">Ctrl + Win</strong> in any app, say what you mean, and release. Your words are typed straight into whatever had the cursor.</p>
+            <div style="display:flex;align-items:center;gap:16px;margin-top:32px">
+              <button class="btn btn-primary" style="padding:12px 24px;font-size:15px">Get started</button>
+            </div>
+          </div>
+          <div style="height:64px;flex:none;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent);display:flex;align-items:center;justify-content:space-between;padding:0 80px">
+            <div style="display:flex;gap:8px;align-items:center">
+              <span style="width:22px;height:4px;background:var(--color-accent);display:block"></span>
+              <span style="width:22px;height:4px;background:color-mix(in srgb, var(--color-text) 22%, transparent);display:block"></span>
+            </div>
+            <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Step 1 of 2</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:56px;background:linear-gradient(140deg,#d9d6d3 0%,#a9a5a2 60%,#c4c0bd 100%)">
+        <div style="font-size:11px;letter-spacing:0.18em;font-weight:700;color:rgba(32,30,29,0.55);margin-bottom:20px">STEP 1 — LIGHT</div>
+        <div style="--color-bg:#f8f7f7;--color-surface:#eae9e9;--color-text:#201e1d;--color-accent:#ec3013;--color-divider:color-mix(in srgb, #201e1d 32%, transparent);width:960px;height:640px;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;font-family:var(--font-body);color:var(--color-text);background:color-mix(in srgb, var(--color-bg) 82%, transparent);backdrop-filter:blur(40px) saturate(1.5);-webkit-backdrop-filter:blur(40px) saturate(1.5);border:1px solid color-mix(in srgb, #201e1d 18%, transparent);box-shadow:0 40px 90px rgba(0,0,0,0.28)">
+          <div style="height:44px;flex:none;display:flex;align-items:center;justify-content:flex-end">
+            <div style="width:46px;height:44px;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb, var(--color-text) 70%, transparent)"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9"/></svg></div>
+          </div>
+          <div style="flex:1;padding:0 80px;display:flex;flex-direction:column;justify-content:center">
+            <div style="width:14px;height:14px;background:var(--color-accent);margin-bottom:32px"></div>
+            <h1 style="font-size:72px;margin:0;letter-spacing:-0.03em">WhisperOSS</h1>
+            <div style="font-family:var(--font-heading);font-weight:800;font-size:30px;letter-spacing:-0.02em;color:color-mix(in srgb, var(--color-text) 62%, transparent);margin-top:6px">Speak anywhere.</div>
+            <div style="height:2px;background:var(--color-divider);margin:40px 0 28px;width:420px"></div>
+            <p style="font-size:16px;line-height:1.6;max-width:520px;color:color-mix(in srgb, var(--color-text) 72%, transparent)">Hold <strong style="font-weight:800">Ctrl + Win</strong> in any app, say what you mean, and release. Your words are typed straight into whatever had the cursor.</p>
+            <div style="display:flex;align-items:center;gap:16px;margin-top:32px">
+              <button class="btn btn-primary" style="padding:12px 24px;font-size:15px">Get started</button>
+            </div>
+          </div>
+          <div style="height:64px;flex:none;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent);display:flex;align-items:center;justify-content:space-between;padding:0 80px">
+            <div style="display:flex;gap:8px;align-items:center">
+              <span style="width:22px;height:4px;background:var(--color-accent);display:block"></span>
+              <span style="width:22px;height:4px;background:color-mix(in srgb, var(--color-text) 22%, transparent);display:block"></span>
+            </div>
+            <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Step 1 of 2</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:56px;background:linear-gradient(140deg,#d9d6d3 0%,#a9a5a2 60%,#c4c0bd 100%)">
+        <div style="font-size:11px;letter-spacing:0.18em;font-weight:700;color:rgba(32,30,29,0.55);margin-bottom:20px">STEP 2 — LIGHT</div>
+        <div style="--color-bg:#f8f7f7;--color-surface:#eae9e9;--color-text:#201e1d;--color-accent:#ec3013;--color-divider:color-mix(in srgb, #201e1d 32%, transparent);width:960px;height:640px;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;font-family:var(--font-body);color:var(--color-text);background:color-mix(in srgb, var(--color-bg) 82%, transparent);backdrop-filter:blur(40px) saturate(1.5);-webkit-backdrop-filter:blur(40px) saturate(1.5);border:1px solid color-mix(in srgb, #201e1d 18%, transparent);box-shadow:0 40px 90px rgba(0,0,0,0.28)">
+          <div style="height:44px;flex:none;display:flex;align-items:center;justify-content:flex-end">
+            <div style="width:46px;height:44px;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb, var(--color-text) 70%, transparent)"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9"/></svg></div>
+          </div>
+          <div style="flex:1;padding:0 80px;display:flex;flex-direction:column;justify-content:center">
+            <div style="font-size:11px;letter-spacing:0.18em;font-weight:700;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-bottom:18px">CONNECT GROQ</div>
+            <h2 style="font-size:44px;margin:0;letter-spacing:-0.025em">Add your API key</h2>
+            <p style="font-size:15px;line-height:1.6;max-width:520px;color:color-mix(in srgb, var(--color-text) 65%, transparent);margin-top:14px">Transcription runs on Groq. The key stays on this PC and is used for nothing else.</p>
+            <div style="height:2px;background:var(--color-divider);margin:32px 0 28px;width:560px"></div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input class="input" type="text" value="gsk_••••••••••••••••••••••••" readonly style="width:400px;font-size:14px;letter-spacing:0.04em">
+              <button class="btn btn-secondary" style="padding:10px 11px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg></button>
+              <button class="btn btn-primary" style="padding:10px 20px;font-size:14px">Validate &amp; finish</button>
+            </div>
+            <div style="margin-top:18px;font-size:13px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Get one at <a href="https://console.groq.com/keys" style="font-weight:700">console.groq.com/keys</a></div>
+          </div>
+          <div style="height:64px;flex:none;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent);display:flex;align-items:center;justify-content:space-between;padding:0 80px">
+            <div style="display:flex;gap:8px;align-items:center">
+              <span style="width:22px;height:4px;background:color-mix(in srgb, var(--color-text) 22%, transparent);display:block"></span>
+              <span style="width:22px;height:4px;background:var(--color-accent);display:block"></span>
+            </div>
+            <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Step 2 of 2</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:56px;background:linear-gradient(140deg,#2c2a28 0%,#141312 60%,#1e1c1b 100%)">
+        <div style="font-size:11px;letter-spacing:0.18em;font-weight:700;color:rgba(255,255,255,0.5);margin-bottom:20px">STEP 2 — DARK, INVALID KEY</div>
+        <div style="--color-bg:#191817;--color-surface:#232120;--color-text:#f3f2f2;--color-accent:#ff563c;--color-divider:color-mix(in srgb, #f3f2f2 30%, transparent);width:960px;height:640px;border-radius:8px;overflow:hidden;display:flex;flex-direction:column;font-family:var(--font-body);color:var(--color-text);background:color-mix(in srgb, var(--color-bg) 84%, transparent);backdrop-filter:blur(40px) saturate(1.5);-webkit-backdrop-filter:blur(40px) saturate(1.5);border:1px solid color-mix(in srgb, #f3f2f2 14%, transparent);box-shadow:0 40px 90px rgba(0,0,0,0.45)">
+          <div style="height:44px;flex:none;display:flex;align-items:center;justify-content:flex-end">
+            <div style="width:46px;height:44px;display:flex;align-items:center;justify-content:center;color:color-mix(in srgb, var(--color-text) 70%, transparent)"><svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9"/></svg></div>
+          </div>
+          <div style="flex:1;padding:0 80px;display:flex;flex-direction:column;justify-content:center">
+            <div style="font-size:11px;letter-spacing:0.18em;font-weight:700;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-bottom:18px">CONNECT GROQ</div>
+            <h2 style="font-size:44px;margin:0;letter-spacing:-0.025em">Add your API key</h2>
+            <p style="font-size:15px;line-height:1.6;max-width:520px;color:color-mix(in srgb, var(--color-text) 65%, transparent);margin-top:14px">Transcription runs on Groq. The key stays on this PC and is used for nothing else.</p>
+            <div style="height:2px;background:var(--color-divider);margin:32px 0 28px;width:560px"></div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input class="input" type="text" value="gsk_7Qd2mM01xLpVvE" readonly style="width:400px;font-size:14px;letter-spacing:0.04em;border-color:var(--color-accent);box-shadow:inset 0 0 0 1px var(--color-accent)">
+              <button class="btn btn-secondary" style="padding:10px 11px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/><path d="M3 21L21 3"/></svg></button>
+              <button class="btn btn-primary" style="padding:10px 20px;font-size:14px">Validate &amp; finish</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px;margin-top:16px;color:var(--color-accent);font-size:13px;font-weight:600">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3L1.5 21h21L12 3z"/><path d="M12 10v5M12 18h.01"/></svg>
+              <span>Groq rejected this key. Check for a missing character.</span>
+            </div>
+            <div style="margin-top:14px;font-size:13px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Get one at <a href="https://console.groq.com/keys" style="font-weight:700">console.groq.com/keys</a></div>
+          </div>
+          <div style="height:64px;flex:none;border-top:1px solid color-mix(in srgb, var(--color-text) 14%, transparent);display:flex;align-items:center;justify-content:space-between;padding:0 80px">
+            <div style="display:flex;gap:8px;align-items:center">
+              <span style="width:22px;height:4px;background:color-mix(in srgb, var(--color-text) 22%, transparent);display:block"></span>
+              <span style="width:22px;height:4px;background:var(--color-accent);display:block"></span>
+            </div>
+            <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Step 2 of 2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showPlacement&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Overlay pill&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return { showPlacement: this.props.showPlacement ?? true };
+  }
+}
+</script>
+</body>
+</html>

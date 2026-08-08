@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhisperOSS → Tauri + Rust — Rewrite Feasibility</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2a3140;
+    --text:#e6e9ef; --dim:#9aa4b2; --accent:#4ea1ff; --green:#3fb970;
+    --amber:#e0a63a; --red:#e5604c; --purple:#a78bfa;
+    --mono:'Cascadia Code',Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.55}
+  .wrap{max-width:1060px;margin:0 auto;padding:40px 28px 80px}
+  h1{font-size:26px;font-weight:650;letter-spacing:-.3px}
+  h2{font-size:19px;font-weight:600;margin:0 0 4px}
+  h3{font-size:15px;font-weight:600}
+  p{color:var(--text)}
+  .dim{color:var(--dim)}
+  section{margin-top:44px}
+  .kicker{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);font-weight:600;margin-bottom:8px}
+  .sub{color:var(--dim);font-size:14px;margin-top:4px}
+
+  .verdict{display:flex;align-items:center;gap:18px;background:linear-gradient(135deg,#10331f,#0d1117 70%);border:1px solid #2a5a3c;border-radius:14px;padding:22px 26px;margin-top:26px}
+  .verdict .badge{background:var(--green);color:#04120a;font-weight:700;font-size:14px;padding:8px 16px;border-radius:999px;white-space:nowrap}
+  .verdict p{font-size:15px}
+
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}
+  .tile{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px}
+  .tile .big{font-size:22px;font-weight:700;margin-bottom:4px}
+  .tile .lbl{font-size:13px;color:var(--dim)}
+
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px;margin-top:16px}
+
+  /* mode rows */
+  .mode{display:grid;grid-template-columns:170px 1fr;gap:16px;padding:16px 0;border-bottom:1px solid var(--border)}
+  .mode:last-child{border-bottom:none}
+  .keys{display:flex;flex-wrap:wrap;gap:5px;align-content:flex-start}
+  .key{font-family:var(--mono);font-size:12px;background:var(--panel2);border:1px solid #3a4356;border-bottom-width:2.5px;border-radius:6px;padding:3px 8px;white-space:nowrap}
+  .mode p{font-size:14px}
+  .mode .name{font-weight:600;margin-bottom:2px}
+
+  /* pipeline */
+  .flow{display:flex;flex-wrap:wrap;gap:0;align-items:stretch;margin-top:14px}
+  .step{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:13px;min-width:135px;flex:1}
+  .step b{display:block;font-size:13px;margin-bottom:3px;color:var(--text)}
+  .step span{color:var(--dim);font-size:12.5px}
+  .arr{display:flex;align-items:center;padding:0 8px;color:var(--accent);font-size:18px;font-weight:700}
+
+  /* difficulty */
+  .diff{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:16px}
+  .dcol{border-radius:12px;padding:18px;border:1px solid var(--border);background:var(--panel)}
+  .dcol.easy{border-top:3px solid var(--green)}
+  .dcol.med{border-top:3px solid var(--amber)}
+  .dcol.hard{border-top:3px solid var(--red)}
+  .dcol h3{margin-bottom:2px}
+  .dcol .tag{font-size:12px;color:var(--dim);margin-bottom:12px;display:block}
+  .dcol ul{list-style:none}
+  .dcol li{font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--border)}
+  .dcol li:last-child{border-bottom:none}
+  .dcol li small{display:block;color:var(--dim);font-size:12px;margin-top:1px}
+
+  /* problem list */
+  .prob{display:grid;grid-template-columns:26px 1fr;gap:12px;padding:13px 0;border-bottom:1px solid var(--border);font-size:14px}
+  .prob:last-child{border-bottom:none}
+  .prob .ico{font-size:16px;line-height:1.4}
+  .prob b{font-weight:600}
+  .prob .fix{color:var(--green);font-size:13px;margin-top:3px;display:block}
+  .ref{font-family:var(--mono);font-size:11.5px;color:var(--dim)}
+
+  /* architecture */
+  .arch{display:grid;grid-template-columns:1fr 60px 1fr;gap:0;margin-top:16px;align-items:stretch}
+  .archbox{border-radius:12px;padding:18px;border:1px solid var(--border)}
+  .archbox.rust{background:linear-gradient(180deg,#2a1d14,#161b22);border-color:#5a4030}
+  .archbox.web{background:linear-gradient(180deg,#14202e,#161b22);border-color:#2e4a6a}
+  .archbox h3{margin-bottom:10px}
+  .archbox ul{list-style:none}
+  .archbox li{font-size:13.5px;padding:6px 10px;background:rgba(255,255,255,.04);border-radius:7px;margin-bottom:6px}
+  .archmid{display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--dim);font-size:11px;gap:4px}
+  .archmid .pipe{color:var(--accent);font-size:20px;font-weight:700}
+
+  .note{background:var(--panel2);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;padding:14px 18px;font-size:14px;margin-top:16px}
+  .warn{border-left-color:var(--amber)}
+
+  @media(max-width:820px){.tiles,.diff{grid-template-columns:1fr}.arch{grid-template-columns:1fr}.archmid{padding:10px 0}.mode{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="kicker">WhisperOSS Redefined · Feasibility Report · 2026-08-08</div>
+  <h1>Can the whole app be rebuilt in Tauri + Rust?</h1>
+  <p class="sub">Based on a full read of the old Python app — 8,152 lines across 19 files in <span class="ref">src-reference\</span></p>
+
+  <div class="verdict">
+    <div class="badge">YES — FEASIBLE</div>
+    <p>Every feature of the old app can be rebuilt in Tauri + Rust, with <b>no blockers</b>. Most of it maps onto mature, well-maintained Rust libraries. Two areas need hand-written Windows-level code (which the old app also hand-wrote, so this is expected), and one area — the animated overlay — is a from-scratch redesign rather than a translation, which is actually where the "genuinely exceptional GUI" goal gets won.</p>
+  </div>
+
+  <div class="tiles">
+    <div class="tile"><div class="big" style="color:var(--green)">100%</div><div class="lbl">of current features are portable — nothing has to be dropped</div></div>
+    <div class="tile"><div class="big" style="color:var(--amber)">3 areas</div><div class="lbl">carry the real engineering effort: hotkeys, paste mechanism, overlay</div></div>
+    <div class="tile"><div class="big" style="color:var(--accent)">~9 defects</div><div class="lbl">in the old app that the rewrite eliminates by design, not by patching</div></div>
+  </div>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="kicker">Context</div>
+    <h2>What the app does today, from the user's chair</h2>
+    <div class="card">
+      <div class="mode">
+        <div class="keys"><span class="key">Hold Ctrl</span><span class="key">then Win</span></div>
+        <div><p class="name">Dictation</p>
+        <p class="dim">You hold the keys anywhere in Windows and speak. A small black pill appears near the bottom of the screen showing live audio bars. When you release, the pill says "Processing", and a moment later your words are typed into whatever app you were using, followed by a checkmark animation. A half-second of audio from <i>before</i> you pressed the keys is included, so the first word is never cut off. Optional AI cleanup can add punctuation, a "casual mode" can lowercase everything and convert spoken emoji names into real emoji, and a translation mode can output a different language.</p></div>
+      </div>
+      <div class="mode">
+        <div class="keys"><span class="key">Hold Win</span><span class="key">then Ctrl</span></div>
+        <div><p class="name">Quick Answer</p>
+        <p class="dim">Same keys, opposite press order. You ask a question out loud; the pill morphs into a scrolling "thinking" ticker, then expands into a black answer card with the response streaming in word by word, backed by live web search. If you had text selected in another app, that selection is silently read and used as context. The card auto-dismisses after 50 seconds or when you click "Seen". Nothing is pasted.</p></div>
+      </div>
+      <div class="mode">
+        <div class="keys"><span class="key">Hold Win</span><span class="key">then Alt</span></div>
+        <div><p class="name">Visual Search</p>
+        <p class="dim">You ask a question, release, then drag a box around any part of any monitor. The screenshot region plus your spoken question go to the AI, and the answer streams into the same card.</p></div>
+      </div>
+      <div class="mode">
+        <div class="keys"><span class="key">Background</span></div>
+        <div><p class="name">Everything else</p>
+        <p class="dim">A settings window with frosted-glass blur and light/dark themes (mic picker, model pickers, toggles for every behavior above). A system-tray icon — closing the window hides the app, it keeps running. Starts with Windows. First-run welcome flow that validates your API key before letting you in. API keys live in Windows Credential Manager, not in a plain file.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="kicker">The critical path</div>
+    <h2>What happens between key-press and text appearing</h2>
+    <p class="sub">This chain is the product. Its speed and reliability is what the user feels every single use.</p>
+    <div class="flow">
+      <div class="step"><b>Keys held</b><span>mic buffer is already running — recording starts instantly</span></div>
+      <div class="arr">→</div>
+      <div class="step"><b>Keys released</b><span>audio packaged in memory, no temp files</span></div>
+      <div class="arr">→</div>
+      <div class="step"><b>Cloud transcribe</b><span>Groq Whisper turns speech into text</span></div>
+      <div class="arr">→</div>
+      <div class="step"><b>Optional AI cleanup</b><span>punctuation / casual / translate</span></div>
+      <div class="arr">→</div>
+      <div class="step"><b>Paste</b><span>clipboard swapped in, Ctrl+V sent, original clipboard restored</span></div>
+    </div>
+    <div class="note warn">
+      The paste step uses a clever trick worth preserving: the transcript is placed on the clipboard with three special Windows flags so it <b>never shows up in your Win+V clipboard history and never syncs to the cloud clipboard</b>, then your original clipboard contents are put back. Privacy-correct — and if the flags can't be set, the old app deliberately refuses to paste rather than leak. The rewrite should keep this exact behavior.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="kicker">Port difficulty</div>
+    <h2>Where the effort actually goes</h2>
+    <div class="diff">
+      <div class="dcol easy">
+        <h3>Drop-in</h3><span class="tag">A maintained Rust library already does exactly this</span>
+        <ul>
+          <li>Settings file <small>same JSON file, same location</small></li>
+          <li>API keys in Credential Manager <small>same vault the old app uses</small></li>
+          <li>Start with Windows <small>official Tauri plugin</small></li>
+          <li>System tray + menu <small>built into Tauri</small></li>
+          <li>Frosted-glass / rounded window <small>library makes the identical Windows calls</small></li>
+          <li>Groq + Gemini calls <small>both are plain web APIs; streaming included. Dropping the Python SDKs loses nothing</small></li>
+          <li>Mic capture + device list <small>standard Rust audio library</small></li>
+          <li>Multi-monitor screenshots <small>existing library — and it handles mixed-DPI monitors, which the old app gets wrong</small></li>
+        </ul>
+      </div>
+      <div class="dcol med">
+        <h3>Custom Windows code</h3><span class="tag">Hand-written, but the old app hand-wrote it too — ports nearly 1:1</span>
+        <ul>
+          <li>Hold-to-talk hotkeys <small>off-the-shelf hotkey tools only do "press once to toggle." "Hold two keys, order decides the mode, abort if Shift is down" needs our own low-level keyboard listener. Bonus: doing it properly kills the old app's 20×/second polling loop and its reach into another library's private internals</small></li>
+          <li>History-proof paste <small>the three privacy clipboard flags have no library wrapper in any language — the raw Windows calls translate directly to Rust</small></li>
+          <li>Silent selection-grab <small>the "read what the user has selected" trick (brief Ctrl+C, restore) ports as-is</small></li>
+        </ul>
+      </div>
+      <div class="dcol hard">
+        <h3>Redesign, not translation</h3><span class="tag">Biggest work item — and the biggest win</span>
+        <ul>
+          <li>The animated overlay <small>2,215 lines of frame-by-frame hand-drawn animation (audio bars, morphing pill, heartbeat-to-checkmark, word-by-word streaming reveal). In Tauri this becomes a transparent click-through web window where CSS/canvas animation does in dozens of lines what Qt needed hundreds for — smoother, GPU-composited, and far easier to make beautiful</small></li>
+          <li>Settings window <small>2,046 lines, roughly 60% of which is styling and hand-painted toggle switches. Becomes ordinary HTML/CSS — massive shrink, and where the "exceptional GUI" goal lives</small></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="kicker">Why rewrite instead of patch</div>
+    <h2>Real defects in the old app the rewrite erases by design</h2>
+    <div class="card">
+      <div class="prob"><div class="ico">🔴</div><div><b>A network hiccup freezes the overlay forever.</b> No request anywhere has a timeout, a retry, or a cancel button — if the transcription service stalls, the pill says "Processing" until you kill the app. <span class="ref">controller.py</span><span class="fix">Rewrite: every request gets a timeout, cancellation, and a visible error state — designed in from day one.</span></div></div>
+      <div class="prob"><div class="ico">🔴</div><div><b>Slow internet = frozen launch.</b> On startup the app fetches two model lists over the network <i>before</i> the UI becomes responsive — the code even contains a comment admitting it. <span class="ref">controller.py:389</span><span class="fix">Rewrite: UI appears instantly; network work happens behind it.</span></div></div>
+      <div class="prob"><div class="ico">🔴</div><div><b>The two main hotkeys misfire by construction.</b> Dictation and Quick Answer use the same physical keys, told apart only by which you pressed last — detected via an 85 ms guess-delay plus a polling thread checking key state 20× a second, because key-release events get lost. <span class="ref">hotkey_manager.py</span><span class="fix">Rewrite: a proper low-level listener sees every key-down and key-up directly — no polling, no guessing.</span></div></div>
+      <div class="prob"><div class="ico">🟠</div><div><b>Opening Settings secretly restarts your microphone.</b> Every time the settings window appears, the entire audio system is torn down and rebuilt just to refresh the device list. <span class="ref">ui_main_window.py:1686</span><span class="fix">Rewrite: device list refreshes without touching the live mic stream.</span></div></div>
+      <div class="prob"><div class="ico">🟠</div><div><b>Copy something at the wrong moment and it's gone.</b> After pasting, your original clipboard is restored on a 550 ms timer — a pure timing guess. Copy during that window and the restore overwrites it. <span class="ref">controller.py:976</span><span class="fix">Rewrite: restore is sequenced off the actual paste, not a stopwatch.</span></div></div>
+      <div class="prob"><div class="ico">🟠</div><div><b>Audio uploads are 3× bigger than needed.</b> Recordings upload at whatever rate the mic runs (usually 48 kHz) and the server downsamples them — tripling upload time on every dictation. <span class="ref">audio_recorder.py:274</span><span class="fix">Rewrite: downsample locally before upload — faster results on any connection.</span></div></div>
+      <div class="prob"><div class="ico">🟠</div><div><b>Question-answering is likely broken out of the box.</b> The default answer-mode model name doesn't appear to be a real model, so Quick Answer fails until the user manually picks another one. <span class="ref">config_manager.py</span><span class="fix">Rewrite: ship verified defaults, validate on first run.</span></div></div>
+      <div class="prob"><div class="ico">🟡</div><div><b>Screen snipping is offset on mixed-DPI monitor setups.</b> The region you drag and the region that's captured disagree when monitors have different scaling. <span class="ref">ui_screen_snip.py</span><span class="fix">Rewrite: the Rust screenshot library is DPI-aware.</span></div></div>
+      <div class="prob"><div class="ico">🟡</div><div><b>Animation burns CPU while hidden.</b> Several animation timers run continuously even when nothing is on screen, and the streaming card re-measures its layout up to ~50 times per frame. <span class="ref">ui_visualizer.py</span><span class="fix">Rewrite: browser compositor animates on the GPU and pauses when invisible.</span></div></div>
+    </div>
+    <div class="note">
+      On top of the bug fixes: a Tauri + Rust build launches in a fraction of the time (no Python interpreter or Qt runtime to load), idles at a fraction of the memory, and ships as a single small installer instead of a bundled Python environment. That directly serves all three goals — GUI, reliability, speed.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="kicker">Proposed shape</div>
+    <h2>How the rewrite splits the work</h2>
+    <p class="sub">Everything the user <i>feels</i> as latency lives in Rust. Everything the user <i>sees</i> lives in web windows.</p>
+    <div class="arch">
+      <div class="archbox rust">
+        <h3>🦀 Rust core — the fast path</h3>
+        <ul>
+          <li>Low-level keyboard listener (hold-to-talk, press-order modes)</li>
+          <li>Always-on mic buffer + half-second pre-roll</li>
+          <li>Local downsampling + in-memory audio packaging</li>
+          <li>Groq / Gemini calls with timeouts, retry, streaming, cancel</li>
+          <li>History-proof clipboard paste + restore</li>
+          <li>Screenshots, settings file, key vault, autostart, tray</li>
+        </ul>
+      </div>
+      <div class="archmid"><span class="pipe">⇄</span><span>events &amp;<br>commands</span></div>
+      <div class="archbox web">
+        <h3>🎨 Web windows — the beautiful part</h3>
+        <ul>
+          <li>Overlay: transparent, click-through, always-on-top — pill, bars, morphs, streaming answer card, all CSS/canvas on the GPU</li>
+          <li>Settings window: the exceptional GUI, in real HTML/CSS</li>
+          <li>Snip overlay: full-screen region picker</li>
+          <li>Onboarding flow</li>
+        </ul>
+      </div>
+    </div>
+    <div class="note warn">
+      <b>Two honest caveats.</b> ① The transparent click-through overlay is well-trodden in Tauri but needs care — toggling "clicks pass through me" on and off (the answer card must be clickable, the pill must not be) is the one Tauri-specific thing to prototype early. ② The low-level keyboard listener carries the same antivirus-heuristic risk the old app already had — unchanged, not worsened.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <div class="kicker">Next step</div>
+    <h2>Where this goes from here</h2>
+    <div class="card">
+      <p>Repo is initialized and <span class="ref">src-reference\</span> is git-ignored (verified). The sensible next move is a <b>product spec</b>: walk through the feature list above and decide what to keep as-is, what to improve (there's room — e.g., configurable hotkeys, a proper error/retry UX, history of past dictations), and what to cut. Then a technical spec pinning down the Rust crates, the overlay window strategy, and the milestone order — with the click-through overlay prototyped first, since it's the only real unknown.</p>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

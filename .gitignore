@@ -1,0 +1,20 @@
+# Old-project reference code — kept locally, never committed
+src-reference/
+
+# Rust / Tauri build output (for when the new app exists)
+target/
+src-tauri/target/
+
+# Frontend dependencies / build output
+node_modules/
+dist/
+
+# Browser-automation scratch output
+.playwright-mcp/
+
+# Local environment & editor noise
+.env
+.env.*
+*.log
+Thumbs.db
+.DS_Store
