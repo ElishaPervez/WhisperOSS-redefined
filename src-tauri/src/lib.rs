@@ -1,6 +1,7 @@
 mod applog;
 mod audio;
 mod dsp;
+mod groq;
 mod hook;
 mod hotkey_logic;
 mod keys;
