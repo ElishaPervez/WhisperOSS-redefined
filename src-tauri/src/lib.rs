@@ -1,5 +1,6 @@
 mod applog;
 mod demo;
+mod keys;
 mod position;
 
 use tauri::{Manager, PhysicalPosition};
