@@ -6,6 +6,7 @@ mod groq;
 mod hook;
 mod hotkey_logic;
 mod keys;
+mod overlay_state;
 mod pipeline;
 mod position;
 
