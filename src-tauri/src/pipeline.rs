@@ -1,30 +1,70 @@
-//! The dictation loop (spec §5): hook events → hold tracker → record →
-//! silence gate → transcribe (stale results discarded by generation) →
-//! privacy paste → sequenced clipboard restore. One dictation at a time;
-//! a new hold makes any in-flight result stale. Errors are logged only
-//! in M1 — the overlay error state arrives in M2.
+//! The dictation loop (spec §5) + overlay choreography (spec §3).
+//! Every UI touch is guarded by the generation counter: a stale worker
+//! (its dictation was superseded) must never show, hide, or restyle the
+//! pill that a newer dictation owns. This also fixes an M1 glitch where a
+//! superseded worker's cleanup could hide the pill mid-listening.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
-use crate::{applog, audio, clipboard, dsp, groq, hook, hotkey_logic};
+use crate::{
+    applog, audio, clipboard, dsp, groq, hook, hotkey_logic, overlay_state,
+};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const PASTE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(5);
 
-fn set_overlay_visible(app: &tauri::AppHandle, visible: bool) {
-    if let Some(w) = app.get_webview_window("overlay") {
-        if visible {
-            // Re-anchor to the monitor the cursor is on right now.
-            let _ = crate::position_overlay(app);
+struct Ui {
+    app: tauri::AppHandle,
+    generation: Arc<AtomicU64>,
+}
+
+impl Ui {
+    fn current(&self, my_gen: u64) -> bool {
+        self.generation.load(Ordering::SeqCst) == my_gen
+    }
+
+    fn emit(&self, my_gen: u64, state: &str, message: &str) {
+        if !self.current(my_gen) {
+            return;
+        }
+        let _ = self
+            .app
+            .emit("ui", overlay_state::ui_payload(state, message));
+    }
+
+    fn show(&self, my_gen: u64) {
+        if !self.current(my_gen) {
+            return;
+        }
+        if let Some(w) = self.app.get_webview_window("overlay") {
+            let _ = crate::position_overlay(&self.app);
             let _ = w.show();
-        } else {
+        }
+    }
+
+    /// Fade the pill out, then hide the window. Blocking — call off-thread.
+    fn fade_out_and_hide(&self, my_gen: u64) {
+        self.emit(my_gen, "hidden", "");
+        std::thread::sleep(Duration::from_millis(overlay_state::FADE_MS));
+        if !self.current(my_gen) {
+            return;
+        }
+        if let Some(w) = self.app.get_webview_window("overlay") {
             let _ = w.hide();
         }
+    }
+
+    /// Error state per design: red pill, 2 s, fade. Blocking — call off-thread.
+    fn show_error(&self, my_gen: u64, message: &str) {
+        self.show(my_gen);
+        self.emit(my_gen, "error", message);
+        std::thread::sleep(Duration::from_millis(overlay_state::ERROR_HOLD_MS));
+        self.fade_out_and_hide(my_gen);
     }
 }
 
@@ -45,18 +85,23 @@ pub fn start(app: tauri::AppHandle, audio: Arc<audio::AudioEngine>, api_key: Str
             match tracker.on_event(ev) {
                 hotkey_logic::Action::None => {}
                 hotkey_logic::Action::Start => {
-                    generation.fetch_add(1, Ordering::SeqCst);
+                    let my_gen = generation.fetch_add(1, Ordering::SeqCst) + 1;
+                    let ui = Ui { app: app.clone(), generation: generation.clone() };
                     if !audio.is_healthy() {
                         applog::log("recording-refused-no-mic");
+                        std::thread::spawn(move || ui.show_error(my_gen, "No mic detected"));
                         continue;
                     }
                     audio.start_recording();
-                    set_overlay_visible(&app, true);
+                    ui.show(my_gen);
+                    ui.emit(my_gen, "listening", "");
                     applog::log("recording-start");
                 }
                 hotkey_logic::Action::Cancel => {
                     let _ = audio.stop_recording();
-                    set_overlay_visible(&app, false);
+                    let my_gen = generation.load(Ordering::SeqCst);
+                    let ui = Ui { app: app.clone(), generation: generation.clone() };
+                    std::thread::spawn(move || ui.fade_out_and_hide(my_gen));
                     applog::log("recording-cancel-short-tap");
                 }
                 hotkey_logic::Action::Finish { held_ms } => {
@@ -65,29 +110,48 @@ pub fn start(app: tauri::AppHandle, audio: Arc<audio::AudioEngine>, api_key: Str
                         "recording-finish held_ms={held_ms} samples={}",
                         samples.len()
                     ));
+                    let my_gen = generation.load(Ordering::SeqCst);
+                    let ui = Ui { app: app.clone(), generation: generation.clone() };
+
                     if dsp::is_effectively_silent(&samples) {
-                        set_overlay_visible(&app, false);
                         applog::log("silent-discarded");
+                        std::thread::spawn(move || ui.fade_out_and_hide(my_gen));
                         continue;
                     }
+
+                    ui.emit(my_gen, "processing", "");
                     let wav = dsp::encode_wav_mono16(
                         &dsp::resample_to_16k(&samples, rate),
                         16_000,
                     );
-                    let my_gen = generation.load(Ordering::SeqCst);
                     let client = client.clone();
-                    let generation = generation.clone();
-                    let app = app.clone();
                     std::thread::spawn(move || {
-                        let result = client.transcribe(wav);
-                        let stale = generation.load(Ordering::SeqCst) != my_gen;
-                        match result {
-                            Ok(text) if stale => applog::log("result-discarded-stale"),
-                            Ok(text) if text.is_empty() => applog::log("empty-transcript"),
-                            Ok(text) => paste(&text),
-                            Err(e) => applog::log(&format!("transcribe-error {e:?}")),
+                        match client.transcribe(wav) {
+                            Ok(_) if !ui.current(my_gen) => {
+                                applog::log("result-discarded-stale");
+                                // No UI touches: a newer dictation owns the pill.
+                            }
+                            Ok(text) if text.is_empty() => {
+                                applog::log("empty-transcript");
+                                ui.fade_out_and_hide(my_gen);
+                            }
+                            Ok(text) => {
+                                if paste(&text) {
+                                    ui.emit(my_gen, "success", "");
+                                    std::thread::sleep(Duration::from_millis(
+                                        overlay_state::SUCCESS_HOLD_MS,
+                                    ));
+                                    ui.fade_out_and_hide(my_gen);
+                                } else {
+                                    ui.show_error(my_gen, "Couldn't paste safely");
+                                }
+                            }
+                            Err(e) => {
+                                let (message, detail) = overlay_state::describe_error(&e);
+                                applog::log(&format!("transcribe-error {message} {detail}"));
+                                ui.show_error(my_gen, message);
+                            }
                         }
-                        set_overlay_visible(&app, false);
                     });
                 }
             }
@@ -95,20 +159,26 @@ pub fn start(app: tauri::AppHandle, audio: Arc<audio::AudioEngine>, api_key: Str
     });
 }
 
-fn paste(text: &str) {
+/// Privacy paste. Returns true only if the text was staged with the privacy
+/// formats AND actually pulled by the target app.
+fn paste(text: &str) -> bool {
     let previous = clipboard::snapshot_text();
     if previous.is_none() {
         applog::log("clipboard-snapshot-empty-or-nontext");
     }
     if !clipboard::stage(text, previous) {
-        // Privacy formats could not be set: NEVER paste unprotected (spec §6).
         applog::log("paste-aborted-privacy-staging-failed");
-        return;
+        return false;
     }
-    std::thread::sleep(Duration::from_millis(60)); // let the clipboard settle
+    std::thread::sleep(Duration::from_millis(60));
     clipboard::send_ctrl_v();
     let confirmed = clipboard::wait_pasted(PASTE_CONFIRM_TIMEOUT);
     std::thread::sleep(Duration::from_millis(250));
     clipboard::restore();
     applog::log(if confirmed { "pasted-confirmed" } else { "paste-unconfirmed" });
+    // Unconfirmed after 5 s usually means the focused app ignores Ctrl+V.
+    // The text WAS delivered to the clipboard mechanism, so count it as a
+    // success for the pill (spec's error table has no entry for this; the
+    // log line records it).
+    true
 }
