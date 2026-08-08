@@ -1,5 +1,6 @@
 mod applog;
 mod audio;
+mod clipboard;
 mod dsp;
 mod groq;
 mod hook;
@@ -12,6 +13,7 @@ use tauri::{Manager, PhysicalPosition};
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            clipboard::init();
             position_overlay(app.handle())?;
             let audio_engine = audio::AudioEngine::start(app.handle().clone());
             // TEMPORARY (removed in Task 9): record continuously so the pill
