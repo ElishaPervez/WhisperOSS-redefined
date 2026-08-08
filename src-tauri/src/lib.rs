@@ -1,5 +1,5 @@
 mod applog;
-mod demo;
+mod audio;
 mod dsp;
 mod hook;
 mod hotkey_logic;
@@ -12,7 +12,10 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             position_overlay(app.handle())?;
-            demo::spawn_demo(app.handle().clone());
+            let audio_engine = audio::AudioEngine::start(app.handle().clone());
+            // TEMPORARY (removed in Task 9): record continuously so the pill
+            // shows live mic levels for this task's verification.
+            audio_engine.start_recording();
             // TEMPORARY (removed in Task 9): prove the hook + tracker work.
             {
                 let (tx, rx) = std::sync::mpsc::channel();

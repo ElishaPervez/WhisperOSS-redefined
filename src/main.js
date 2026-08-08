@@ -21,14 +21,6 @@ const weights = bars.map((_, i) => {
 let target = 0; // latest level from Rust, 0..1
 listen("level", (e) => { target = e.payload; });
 
-const dot = document.getElementById("dot");
-listen("clickthrough", (e) => {
-  // green = clicks pass through the pill, red = pill catches clicks
-  dot.style.background = e.payload ? "#3fb970" : "#ec3013";
-});
-document.addEventListener("click", () =>
-  console.log("PILL CLICKED — click-through is OFF"));
-
 // --- fps meter --------------------------------------------------------
 const fpsEl = document.getElementById("fps");
 let frames = 0, last = performance.now(), minFps = Infinity;
