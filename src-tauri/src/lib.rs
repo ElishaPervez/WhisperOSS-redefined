@@ -1,3 +1,4 @@
+mod applog;
 mod demo;
 mod position;
 
