@@ -1,5 +1,6 @@
 mod applog;
 mod demo;
+mod dsp;
 mod keys;
 mod position;
 
