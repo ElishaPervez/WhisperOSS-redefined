@@ -10,9 +10,20 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "scaffold-tmp",
-        "width": 800,
-        "height": 600
+        "label": "overlay",
+        "title": "WhisperOSS Overlay",
+        "width": 120,
+        "height": 36,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": false,
+        "visible": true
       }
     ],
     "security": {
