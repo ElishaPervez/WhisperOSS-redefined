@@ -9,23 +9,63 @@
     position: fixed; inset: 0;
     background: #0b0a0a;
     border-radius: 18px;
-    display: flex; align-items: center; justify-content: center; gap: 3px;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 1;
+    transition: opacity 240ms ease, background-color 160ms ease;
   }
+  .pill.faded { opacity: 0; }
+  .pill.error { background: #ec3013; }
+
+  .face {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center; gap: 3px;
+    opacity: 0; transition: opacity 120ms ease; pointer-events: none;
+  }
+  .face.on { opacity: 1; }
+
   .bar {
     width: 3px; height: 24px; border-radius: 1.5px;
     background: #f3f2f2;
     transform: scaleY(0.16); transform-origin: center;
     will-change: transform;
   }
-  .fps {
-    position: absolute; left: 6px; top: 3px;
-    font: 8px monospace; color: #7d7979;
+
+  .status {
+    font: 700 9px "Segoe UI", system-ui, sans-serif;
+    letter-spacing: 0.18em;
+    background: linear-gradient(100deg, #8a8a8a 40%, #ffffff 50%, #8a8a8a 60%);
+    background-size: 250% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: shim 1.6s linear infinite;
+  }
+  @keyframes shim {
+    from { background-position: 140% 0; }
+    to   { background-position: -40% 0; }
+  }
+
+  .check.on svg { animation: pop 280ms cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+  @keyframes pop {
+    from { transform: scale(0.4); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  .err {
+    font: 600 10px "Segoe UI", system-ui, sans-serif;
+    color: #ffffff; letter-spacing: 0.02em;
   }
 </style>
 </head>
 <body>
-  <div class="pill">
-    <div class="fps" id="fps"></div>
+  <div class="pill" id="pill">
+    <div class="face" id="face-listening"></div>
+    <div class="face" id="face-processing"><span class="status">PROCESSING</span></div>
+    <div class="face check" id="face-success">
+      <svg viewBox="0 0 24 24" width="16" height="16">
+        <path d="M4 12.5l5 5L20 6.5" stroke="#f3f2f2" stroke-width="3"
+              fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="face" id="face-error"><span class="err" id="err-text"></span></div>
   </div>
   <script src="main.js"></script>
 </body>
