@@ -1,6 +1,7 @@
 mod applog;
 mod demo;
 mod dsp;
+mod hook;
 mod hotkey_logic;
 mod keys;
 mod position;
@@ -12,6 +13,24 @@ pub fn run() {
         .setup(|app| {
             position_overlay(app.handle())?;
             demo::spawn_demo(app.handle().clone());
+            // TEMPORARY (removed in Task 9): prove the hook + tracker work.
+            {
+                let (tx, rx) = std::sync::mpsc::channel();
+                hook::spawn(tx);
+                std::thread::spawn(move || {
+                    let mut tracker = hotkey_logic::HoldTracker::new();
+                    for ev in rx {
+                        match tracker.on_event(ev) {
+                            hotkey_logic::Action::Start => applog::log("hook-test-start"),
+                            hotkey_logic::Action::Finish { held_ms } => {
+                                applog::log(&format!("hook-test-finish held_ms={held_ms}"))
+                            }
+                            hotkey_logic::Action::Cancel => applog::log("hook-test-cancel"),
+                            hotkey_logic::Action::None => {}
+                        }
+                    }
+                });
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
