@@ -13,6 +13,7 @@
 ## Global Constraints
 
 - Windows-only. Repo root: `C:\projects (code)\15. WhisperOSS redefined` (note the spaces — always quote paths).
+- Shell: `cd`, `git`, `npm`, and `cargo` commands work as written in both PowerShell and Git Bash. Where file operations differ (Task 1 Step 2), both variants are given — use the one matching your shell.
 - `src-reference/` is v1 Python. Never modify it, never import from it, never commit it.
 - Pill: **120×36 logical px**, bottom-center, **26 logical px above the taskbar** (work area bottom), on the monitor containing the cursor. DPI-aware: physical = logical × scale factor.
 - Overlay window: transparent, no decorations, no shadow, always-on-top, skip-taskbar, never takes focus.
@@ -42,11 +43,15 @@ npm create tauri-app@latest scaffold-tmp -- --template vanilla --manager npm --y
 
 - [ ] **Step 2: Move it into the repo root, keeping our .gitignore**
 
-```bash
-rm scaffold-tmp/.gitignore
-cp -r scaffold-tmp/. .
-rm -rf scaffold-tmp
+PowerShell:
+
+```powershell
+Remove-Item scaffold-tmp\.gitignore
+Copy-Item -Path "scaffold-tmp\*" -Destination . -Recurse -Force
+Remove-Item -Recurse -Force scaffold-tmp
 ```
+
+Or in Git Bash: `rm scaffold-tmp/.gitignore && cp -r scaffold-tmp/. . && rm -rf scaffold-tmp`
 
 The vanilla template serves the frontend straight from a source folder (`frontendDist` pointing at it in `tauri.conf.json`) with no build step. If the generated layout differs from the paths this plan uses (`src/index.html`, `src/main.js`), keep the template's layout and use its paths consistently in Tasks 3–5 — the file *contents* in this plan are what matters.
 
