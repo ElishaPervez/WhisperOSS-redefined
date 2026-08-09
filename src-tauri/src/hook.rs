@@ -30,6 +30,11 @@ static MODS_DOWN: AtomicU32 = AtomicU32::new(0);
 // also arms a watchdog that clears it no matter what happens next.
 static CAPTURE: AtomicBool = AtomicBool::new(false);
 
+// Diagnostic window: while true, every key transition is logged with the
+// swallow flag's value. Bounded so the hook stays fast enough that Windows
+// does not drop it.
+static DIAG: AtomicBool = AtomicBool::new(false);
+
 const CTRL_BIT: u32 = 1;
 const WIN_BIT: u32 = 2;
 const ALT_BIT: u32 = 4;
@@ -56,6 +61,10 @@ pub fn set_suppression(other_vk: Option<u32>, required_modifiers: &[Key]) {
 /// is focused. Key events are still forwarded to the pipeline.
 pub fn set_capture(on: bool) {
     CAPTURE.store(on, Ordering::SeqCst);
+}
+
+pub fn set_diag(on: bool) {
+    DIAG.store(on, Ordering::SeqCst);
 }
 
 /// Read back for diagnostics: proves whether the store reached this module.
@@ -91,9 +100,14 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
                 let _ = tx.send(ev);
             }
 
-            if CAPTURE.load(Ordering::SeqCst) {
+            let capture_on = CAPTURE.load(Ordering::SeqCst);
+            if DIAG.load(Ordering::SeqCst) {
                 // Diagnostic only — no key identity, per the privacy rule.
-                crate::applog::log(if down { "hook-swallow-down" } else { "hook-swallow-up" });
+                crate::applog::log(&format!(
+                    "hook-key down={down} capture={capture_on}"
+                ));
+            }
+            if capture_on {
                 return LRESULT(1);
             }
 

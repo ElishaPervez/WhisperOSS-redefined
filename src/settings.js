@@ -197,9 +197,10 @@ listen("hotkey", ({ payload }) => {
   );
 });
 
-// Clicking away mid-rebind must not leave the keyboard swallowed.
+// DIAGNOSTIC: blur no longer cancels — it only reports. The 6 s watchdog is
+// the safety net for this run.
 window.addEventListener("blur", () => {
-  if (capturing) invoke("cancel_hotkey_capture", { reason: "blur" });
+  if (capturing) invoke("report_blur");
 });
 
 load();

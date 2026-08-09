@@ -118,6 +118,7 @@ pub fn begin_hotkey_capture(app: tauri::AppHandle, state: State<AppState>) {
     let my_gen = state.capture_gen.load(Ordering::SeqCst);
     state.capturing.store(true, Ordering::SeqCst);
     hook::set_capture(true);
+    hook::set_diag(true);
     applog::log(&format!(
         "hotkey-capture-begin hook_flag={}",
         hook::is_capturing()
@@ -131,6 +132,7 @@ pub fn begin_hotkey_capture(app: tauri::AppHandle, state: State<AppState>) {
         if capture_gen.load(Ordering::SeqCst) == my_gen
             && capturing.swap(false, Ordering::SeqCst)
         {
+            hook::set_diag(false);
             hook::set_capture(false);
             capture_gen.fetch_add(1, Ordering::SeqCst);
             applog::log("hotkey-capture-timeout");
@@ -146,6 +148,7 @@ pub fn begin_hotkey_capture(app: tauri::AppHandle, state: State<AppState>) {
 pub fn cancel_hotkey_capture(app: tauri::AppHandle, state: State<AppState>, reason: String) {
     if state.capturing.swap(false, Ordering::SeqCst) {
         hook::set_capture(false);
+        hook::set_diag(false);
         state.capture_gen.fetch_add(1, Ordering::SeqCst);
         applog::log(&format!("hotkey-capture-cancelled reason={reason}"));
         let _ = app.emit(
@@ -155,6 +158,16 @@ pub fn cancel_hotkey_capture(app: tauri::AppHandle, state: State<AppState>, reas
     } else {
         applog::log(&format!("hotkey-capture-cancel-ignored reason={reason}"));
     }
+}
+
+/// Diagnostic: records that the settings window lost focus during a rebind,
+/// without ending it. Round 1 showed blur was cancelling every attempt.
+#[tauri::command]
+pub fn report_blur(state: State<AppState>) {
+    applog::log(&format!(
+        "settings-window-blurred capturing={}",
+        state.capturing.load(Ordering::SeqCst)
+    ));
 }
 
 #[cfg(test)]

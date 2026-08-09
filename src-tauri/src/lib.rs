@@ -33,6 +33,7 @@ pub fn run() {
             commands::set_microphone,
             commands::begin_hotkey_capture,
             commands::cancel_hotkey_capture,
+            commands::report_blur,
         ])
         .setup(|app| {
             applog::log("app-start");

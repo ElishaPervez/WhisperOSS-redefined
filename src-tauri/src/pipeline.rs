@@ -94,6 +94,7 @@ fn end_capture(state: &crate::state::AppState) {
     state.capturing.store(false, Ordering::SeqCst);
     state.capture_gen.fetch_add(1, Ordering::SeqCst);
     hook::set_capture(false);
+    hook::set_diag(false);
 }
 
 pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
