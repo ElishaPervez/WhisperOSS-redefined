@@ -16,8 +16,8 @@ mod prompts;
 mod state;
 
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::TrayIconBuilder;
-use tauri::{Manager, PhysicalPosition};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
+use tauri::{Manager, PhysicalPosition, WindowEvent};
 
 pub fn run() {
     tauri::Builder::default()
@@ -55,24 +55,55 @@ pub fn run() {
             }
             pipeline::start(app.handle().clone(), audio_engine, app_state);
 
+            let show = MenuItem::with_id(app, "show", "Show settings", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit WhisperOSS", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&quit])?;
+            let menu = Menu::with_items(app, &[&show, &quit])?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().expect("icon").clone())
                 .menu(&menu)
                 .tooltip("WhisperOSS")
-                .on_menu_event(|app, event| {
-                    if event.id.as_ref() == "quit" {
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => show_settings(app),
+                    "quit" => {
                         applog::log("quit-from-tray");
                         app.exit(0);
                     }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        show_settings(tray.app_handle());
+                    }
                 })
                 .build(app)?;
+
+            if let Some(settings) = app.get_webview_window("settings") {
+                let handle = settings.clone();
+                settings.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = handle.hide();
+                        applog::log("settings-hidden-to-tray");
+                    }
+                });
+            }
 
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+pub(crate) fn show_settings(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
 }
 
 /// Bottom-center of the monitor the cursor is on, 26 logical px above the
