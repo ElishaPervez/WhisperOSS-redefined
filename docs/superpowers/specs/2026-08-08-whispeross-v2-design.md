@@ -24,8 +24,11 @@ speed (startup and every interaction).
   the user's original clipboard is restored afterward.
 - Optional AI cleanup, off by default: **AI formatting** toggle
   (punctuation/paragraphs) and **Casual mode** toggle (lowercase, light emoji).
-- Configurable hotkey (default Ctrl+Win), rebindable from settings.
-- Settings window with exactly seven controls (see §4).
+- Fixed hotkey: **Ctrl+Win**. Read from config at startup and validated, but there
+  is no rebind UI — the capture-based rebind was built in Milestone 3c and removed
+  after it proved unreliable (it was cancelled by the settings window's own focus
+  handling before any key could be recorded).
+- Settings window with exactly six controls (see §4).
 - First-run flow: welcome → API key entry with live validation.
 - System tray (Show settings / Quit); closing the window hides to tray.
 - Start with Windows (per-user registry Run key), toggleable.
@@ -63,15 +66,14 @@ uppercase micro-labels. Both themes are specified for every surface.
 ### Surfaces
 
 **Settings window — 960×640, frameless, acrylic, the only real window.**
-Header (brand + minimize/close) · hotkey hero ("Hold Ctrl + Win — speak —
-release" + *Change hotkey* button) · then exactly seven controls:
+Header (brand + minimize/close) · display-only hotkey hero ("Hold Ctrl + Win —
+speak — release") · then exactly six controls:
 1. Groq API key (masked field, show/hide, Save)
 2. AI formatting (toggle)
 3. Casual mode (toggle)
 4. Microphone (dropdown + refresh)
 5. Theme (Auto / Light / Dark segmented control)
 6. Start with Windows (toggle)
-7. *(Change hotkey counts as the seventh control, in the hero)*
 Footer status line: "Groq connected · Microphone OK" + version.
 
 **Overlay pill — 120×36, always on top, click-through, never takes focus.**
@@ -184,7 +186,7 @@ no transcript contents — timestamps and event names only).
 
 **Automated (Rust unit/integration):** config load/merge/migration, WAV
 packaging + downsample correctness, silence detection, hotkey state machine
-(hold/abort/rebind cases as pure logic), Groq client against a local mock
+(hold/abort cases as pure logic), Groq client against a local mock
 server (success, timeout, retry, 401, cancel).
 
 **Manual release checklist** (Windows integrations where mocks would exceed
@@ -205,7 +207,7 @@ close-to-tray, autostart, first-run flow end to end.
    privacy paste, tray icon, no settings UI. The product works end to end.
 2. **Overlay wired** — real states and live levels replace synthetic data.
 3. **Settings** — window from the design export, config + Credential Manager,
-   mic picker, theme, hotkey rebind, autostart toggle.
+   mic picker, theme, autostart toggle.
 4. **First-run + polish** — onboarding flow, app icon, installer, acrylic.
 5. **Hardening** — full error matrix, manual checklist pass, performance pass.
 
