@@ -112,6 +112,23 @@ pub fn finish_first_run(app: tauri::AppHandle) {
     applog::log("first-run-complete");
 }
 
+/// What the microphone is really doing, for the settings window. `active` is
+/// the device the stream actually opened, which differs from the user's
+/// choice when Windows refused that device.
+#[derive(serde::Serialize)]
+pub struct MicStatus {
+    pub healthy: bool,
+    pub active: Option<String>,
+}
+
+#[tauri::command]
+pub fn microphone_status(state: State<AppState>) -> MicStatus {
+    MicStatus {
+        healthy: state.audio.is_healthy(),
+        active: state.audio.active_device(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

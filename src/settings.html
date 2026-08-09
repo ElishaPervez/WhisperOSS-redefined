@@ -91,6 +91,7 @@
     color: var(--text); border: 1px solid var(--divider);
     font-family: var(--font-body);
   }
+  .micnote { font-size: 12px; color: var(--accent); margin-left: 4px; }
 
   .statusbar {
     height: 46px; flex: none;
@@ -163,7 +164,7 @@
     <div class="row">
       <div>
         <div class="label">Microphone</div>
-        <div class="desc">Input device used while dictating</div>
+        <div class="desc">Input device used while dictating <span class="micnote" id="mic-note"></span></div>
       </div>
       <select class="mic" id="mic"></select>
     </div>

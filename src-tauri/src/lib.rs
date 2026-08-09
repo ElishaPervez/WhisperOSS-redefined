@@ -33,6 +33,7 @@ pub fn run() {
             commands::list_microphones,
             commands::set_microphone,
             commands::finish_first_run,
+            commands::microphone_status,
         ])
         .setup(|app| {
             applog::log("app-start");

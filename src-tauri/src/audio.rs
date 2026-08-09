@@ -43,6 +43,9 @@ pub struct AudioEngine {
     rate: AtomicU32,
     peak: AtomicU16,
     healthy: AtomicBool,
+    /// The device the running stream actually opened — not necessarily the
+    /// one the user picked, since a refused device falls back to the default.
+    active_device: Mutex<Option<String>>,
     /// Carries the next device name to the stream thread. The stream object
     /// itself can only exist on that thread.
     device_tx: Mutex<Sender<Option<String>>>,
@@ -57,6 +60,7 @@ impl AudioEngine {
             rate: AtomicU32::new(16_000),
             peak: AtomicU16::new(0),
             healthy: AtomicBool::new(false),
+            active_device: Mutex::new(None),
             device_tx: Mutex::new(device_tx),
         });
 
@@ -64,11 +68,31 @@ impl AudioEngine {
         // this one thread. It blocks here until a device change arrives.
         let e = engine.clone();
         std::thread::spawn(move || {
-            let mut stream = open(&e, &preferred);
-            for next in device_rx {
-                drop(stream.take());
-                e.reset_buffers();
-                stream = open(&e, &next);
+            use std::sync::mpsc::RecvTimeoutError;
+            let mut wanted = preferred;
+            let mut stream = open(&e, &wanted);
+            loop {
+                match device_rx.recv_timeout(Duration::from_secs(2)) {
+                    Ok(next) => {
+                        // Dropping on this thread is required: cpal streams
+                        // are !Send.
+                        drop(stream.take());
+                        e.reset_buffers();
+                        wanted = next;
+                        stream = open(&e, &wanted);
+                    }
+                    Err(RecvTimeoutError::Timeout) => {
+                        // Nobody asked for a change. If there is no working
+                        // stream — no mic at boot, one unplugged, or a device
+                        // Windows refused — try again.
+                        if !e.is_healthy() {
+                            drop(stream.take());
+                            e.reset_buffers();
+                            stream = reopen_quietly(&e, &wanted);
+                        }
+                    }
+                    Err(RecvTimeoutError::Disconnected) => break,
+                }
             }
         });
 
@@ -87,6 +111,10 @@ impl AudioEngine {
 
     pub fn is_healthy(&self) -> bool {
         self.healthy.load(Ordering::SeqCst)
+    }
+
+    pub fn active_device(&self) -> Option<String> {
+        self.active_device.lock().unwrap().clone()
     }
 
     /// Change the capture device without restarting the app. The pre-roll
@@ -143,13 +171,38 @@ fn open(engine: &Arc<AudioEngine>, preferred: &Option<String>) -> Option<cpal::S
                 Some(stream)
             } else {
                 applog::log("audio-stream-play-failed");
+                *engine.active_device.lock().unwrap() = None;
                 None
             }
         }
         Err(msg) => {
             applog::log(&format!("audio-stream-error {msg}"));
+            *engine.active_device.lock().unwrap() = None;
             None
         }
+    }
+}
+
+/// The retry path, run every two seconds while there is no working stream.
+/// It stays silent while it keeps failing — otherwise a machine with no
+/// microphone would write a log line every two seconds forever — and writes
+/// exactly one line when a device finally appears.
+fn reopen_quietly(engine: &Arc<AudioEngine>, preferred: &Option<String>) -> Option<cpal::Stream> {
+    engine.healthy.store(false, Ordering::SeqCst);
+    let stream = match build_stream(engine, preferred) {
+        Ok(s) => s,
+        Err(_) => {
+            *engine.active_device.lock().unwrap() = None;
+            return None;
+        }
+    };
+    if stream.play().is_ok() {
+        engine.healthy.store(true, Ordering::SeqCst);
+        applog::log("audio-stream-recovered");
+        Some(stream)
+    } else {
+        *engine.active_device.lock().unwrap() = None;
+        None
     }
 }
 
@@ -159,6 +212,7 @@ fn build_stream(
 ) -> Result<cpal::Stream, String> {
     let host = cpal::default_host();
     let device = pick_device(preferred).ok_or("no input device")?;
+    *engine.active_device.lock().unwrap() = device.name().ok();
     let _ = host; // host only needed by pick_device/list; drop if warned
     let config = device.default_input_config().map_err(|e| e.to_string())?;
     let rate = config.sample_rate().0;
@@ -167,7 +221,13 @@ fn build_stream(
     let ring_cap = (rate as f64 * PRE_ROLL_SECS) as usize;
 
     let e = engine.clone();
-    let err_fn = |err| applog::log(&format!("audio-callback-error {err}"));
+    // A device that dies mid-stream must stop counting as healthy, or the
+    // retry loop below will never notice it needs to reopen.
+    let e_err = engine.clone();
+    let err_fn = move |err| {
+        applog::log(&format!("audio-callback-error {err}"));
+        e_err.healthy.store(false, Ordering::SeqCst);
+    };
 
     let stream = match config.sample_format() {
         cpal::SampleFormat::F32 => device

@@ -77,6 +77,15 @@ async function load() {
 
   renderCombo(cfg.hotkey);
   await loadMics(cfg.input_device);
+  const mic = await invoke("microphone_status");
+  const note = el("mic-note");
+  if (!mic.healthy) {
+    note.textContent = "· no microphone available";
+  } else if (cfg.input_device && mic.active && mic.active !== cfg.input_device) {
+    note.textContent = `· unavailable, using ${mic.active}`;
+  } else {
+    note.textContent = "";
+  }
 
   const hasKey = await invoke("has_api_key");
   if (hasKey) {
