@@ -76,13 +76,18 @@ speak — release") · then exactly six controls:
 6. Start with Windows (toggle)
 Footer status line: "Groq connected · Microphone OK" + version.
 
-**Overlay pill — 120×36, always on top, click-through, never takes focus.**
+**Overlay pill — resting size 120×36, always on top, click-through, never takes focus.**
 Bottom-center of the monitor the cursor is on, 26 px above the taskbar.
+The shipped face uses Windows' transient system backdrop with a translucent
+smoked-grey tint and an 8 px system corner clip. On the verified Windows build
+the material is translucent without visible blur; the human chose that look
+over the old opaque pill. Error states use the same material with a translucent
+red tint and grow with their message, from 120 px to a 340 px maximum.
 Five states with specified motion:
 - **Listening** — 12 bars driven by live input level.
 - **Processing** — "PROCESSING" with a shimmer sweeping left, 1.6 s loop.
 - **Success** — check pops in, holds 400 ms, fades.
-- **Error** — red pill with a 3–4 word message, shown 2 s, then fades.
+- **Error** — translucent red pill sized to its full message, shown 2 s, then fades.
 - **Idle** — nothing on screen; exit fade is 240 ms.
 
 **First-run — two steps in the same window shell.**
@@ -111,8 +116,12 @@ dictation in flight.
   Transcription request: 15 s timeout, one automatic retry, cancellable.
   Starting a new dictation cancels any in-flight request. Optional second
   request for formatting/casual cleanup (same timeout rules).
-- **Paste** — Win32 clipboard via `windows-rs`: snapshot current clipboard,
-  set transcript with the three history-exclusion formats
+- **Paste** — Win32 clipboard via `windows-rs`: snapshot every restorable
+  HGLOBAL-backed format (clipboard contents stored as byte blocks), including
+  Unicode text, DIB screenshots, copied files, and app-registered rich formats
+  such as HTML and RTF. The in-memory snapshot is capped at 16 MB; an oversized
+  clipboard keeps text only. Then set the transcript with the three
+  history-exclusion formats
   (`ExcludeClipboardContentFromMonitorProcessing`,
   `CanIncludeInClipboardHistory=0`, `CanUploadToCloudClipboard=0`),
   inject Ctrl+V, restore the snapshot after the paste is confirmed —
@@ -180,10 +189,10 @@ dialogs, no permanently stuck states.
 | Mic vanishes mid-recording | finish with what was captured if >minimum, else error pill |
 | Selected mic can't be opened | falls back to the Windows default and the settings window shows "unavailable, using <device>" beside the picker |
 
-The pill is 120 px wide, so messages are kept to roughly twenty characters.
-"Groq error" rather than "Groq error — try again" for that reason, and because
-the app has already retried once by the time the message appears — telling the
-user to try again would be describing work it just did.
+The pill rests at 120 px wide. Rust calculates an error pill's width from the
+message it chose, up to 340 px, and the text never wraps. "Groq error" remains
+brief because the app has already retried once by the time the message appears —
+telling the user to try again would be describing work it just did.
 
 Diagnostics: a plain-text log (`%APPDATA%\WhisperOSS\log.txt`, size-capped,
 no transcript contents — timestamps and event names only).
