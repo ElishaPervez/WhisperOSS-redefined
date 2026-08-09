@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Archivo";
+  src: url("fonts/archivo-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: block;
+}
+
 /* WhisperOSS design tokens (from the Modernist design system export).
    Light is the default; dark applies via OS preference OR an explicit
    data-theme, so "auto" = follow Windows, "light"/"dark" = force. */
@@ -8,8 +16,8 @@
   --accent: #ec3013;
   --divider: color-mix(in srgb, #201e1d 30%, transparent);
   --muted: color-mix(in srgb, #201e1d 55%, transparent);
-  --font-heading: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
-  --font-body: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-heading: "Archivo", "Segoe UI Variable Display", system-ui, sans-serif;
+  --font-body: "Archivo", "Segoe UI Variable Text", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
