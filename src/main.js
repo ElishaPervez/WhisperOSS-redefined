@@ -1,4 +1,5 @@
 const { listen } = window.__TAURI__.event;
+const { invoke } = window.__TAURI__.core;
 
 // --- faces ------------------------------------------------------------
 const pill = document.getElementById("pill");
@@ -17,6 +18,10 @@ function setState(state, message) {
     el.classList.toggle("on", name === state);
   }
   if (state === "error") errText.textContent = message || "Error";
+  if (state === "listening") {
+    // After the next paint, so the log line means "bars are on screen".
+    requestAnimationFrame(() => invoke("overlay_visible"));
+  }
 }
 
 listen("ui", (e) => setState(e.payload.state, e.payload.message));

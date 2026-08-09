@@ -143,3 +143,10 @@ mod tests {
         assert_eq!(normalize_theme(""), "auto");
     }
 }
+
+/// The overlay reports the moment the listening bars are actually painted,
+/// so hold-to-visible latency can be read straight from the log.
+#[tauri::command]
+pub fn overlay_visible() {
+    applog::log("overlay-listening-visible");
+}

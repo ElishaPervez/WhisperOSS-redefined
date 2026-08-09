@@ -34,6 +34,7 @@ pub fn run() {
             commands::set_microphone,
             commands::finish_first_run,
             commands::microphone_status,
+            commands::overlay_visible,
         ])
         .setup(|app| {
             applog::log("app-start");
@@ -98,6 +99,7 @@ pub fn run() {
                 });
             }
 
+            applog::log("app-ready");
             Ok(())
         })
         .run(tauri::generate_context!())
