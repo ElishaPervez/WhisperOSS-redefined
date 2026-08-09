@@ -2,7 +2,6 @@ mod applog;
 mod audio;
 mod autostart;
 mod clipboard;
-#[allow(dead_code)]
 mod config;
 mod dsp;
 mod groq;
@@ -29,17 +28,21 @@ pub fn run() {
                 let _ = w.set_ignore_cursor_events(true);
             }
 
-            let audio_engine = audio::AudioEngine::start(app.handle().clone());
+            let cfg = config::load();
+            config::save(&cfg); // materialize the file with defaults on first run
+            autostart::reconcile(cfg.run_on_startup);
+
+            let audio_engine =
+                audio::AudioEngine::start(app.handle().clone(), cfg.input_device.clone());
 
             match keys::load() {
-                Some(key) => {
-                    pipeline::start(app.handle().clone(), audio_engine, key)
-                }
-                None => {
-                    // Headless M1: without a key the hotkey does nothing.
-                    // Set WHISPEROSS_GROQ_KEY once and restart (see keys.rs).
-                    applog::log("pipeline-not-started-no-key");
-                }
+                Some(key) => pipeline::start(
+                    app.handle().clone(),
+                    audio_engine,
+                    key,
+                    cfg,
+                ),
+                None => applog::log("pipeline-not-started-no-key"),
             }
 
             let quit = MenuItem::with_id(app, "quit", "Quit WhisperOSS", true, None::<&str>)?;

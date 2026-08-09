@@ -68,10 +68,24 @@ impl Ui {
     }
 }
 
-pub fn start(app: tauri::AppHandle, audio: Arc<audio::AudioEngine>, api_key: String) {
+pub fn start(
+    app: tauri::AppHandle,
+    audio: Arc<audio::AudioEngine>,
+    api_key: String,
+    cfg: crate::config::Config,
+) {
     let (tx, rx) = channel();
     hook::spawn(tx);
 
+    let combo = hotkey_logic::parse_combo(&cfg.hotkey).unwrap_or_else(|| {
+        applog::log("config-invalid-hotkey-using-default");
+        hotkey_logic::parse_combo(&["ctrl".into(), "win".into()]).expect("default combo")
+    });
+    hook::set_suppression(hotkey_logic::combo_other_vk(&combo),
+                          &combo.iter().copied().filter(|k| k.is_modifier()).collect::<Vec<_>>());
+
+    let use_formatter = cfg.use_formatter;
+    let casual = cfg.casual_mode;
     let client = Arc::new(groq::GroqClient::new(
         api_key,
         groq::PROD_BASE_URL.to_string(),
@@ -80,7 +94,7 @@ pub fn start(app: tauri::AppHandle, audio: Arc<audio::AudioEngine>, api_key: Str
     let generation = Arc::new(AtomicU64::new(0));
 
     std::thread::spawn(move || {
-        let mut tracker = hotkey_logic::HoldTracker::new();
+        let mut tracker = hotkey_logic::HoldTracker::new(combo);
         for ev in rx {
             match tracker.on_event(ev) {
                 hotkey_logic::Action::None => {}
@@ -136,7 +150,22 @@ pub fn start(app: tauri::AppHandle, audio: Arc<audio::AudioEngine>, api_key: Str
                                 ui.fade_out_and_hide(my_gen);
                             }
                             Ok(text) => {
-                                if paste(&text) {
+                                let final_text = if use_formatter {
+                                    match client.format_text(&text, casual) {
+                                        Ok(f) if !f.is_empty() => f,
+                                        Ok(_) => text.clone(),
+                                        Err(e) => {
+                                            let (m, d) = overlay_state::describe_error(&e);
+                                            applog::log(&format!(
+                                                "formatter-failed-fallback-raw {m} {d}"
+                                            ));
+                                            text.clone()
+                                        }
+                                    }
+                                } else {
+                                    text.clone()
+                                };
+                                if paste(&final_text) {
                                     ui.emit(my_gen, "success", "");
                                     std::thread::sleep(Duration::from_millis(
                                         overlay_state::SUCCESS_HOLD_MS,

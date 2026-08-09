@@ -74,7 +74,6 @@ impl GroqClient {
     }
 
     /// Optional cleanup pass (spec §2). Same retry discipline as transcribe.
-    #[allow(dead_code)]
     pub fn format_text(&self, text: &str, casual: bool) -> Result<String, GroqError> {
         let mut last = None;
         for _ in 0..2 {
