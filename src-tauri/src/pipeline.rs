@@ -153,7 +153,7 @@ pub fn start(app: tauri::AppHandle, audio: Arc<audio::AudioEngine>, state: crate
                                 ui.fade_out_and_hide(my_gen);
                             }
                             Ok(text) => {
-                                let final_text = if use_formatter {
+                                let final_text = if wants_formatting(use_formatter, casual) {
                                     match client.format_text(&text, casual) {
                                         Ok(f) if !f.is_empty() => f,
                                         Ok(_) => text.clone(),
@@ -191,6 +191,13 @@ pub fn start(app: tauri::AppHandle, audio: Arc<audio::AudioEngine>, state: crate
     });
 }
 
+/// The AI rewrite runs when EITHER toggle is on. Casual is its own trigger,
+/// not a sub-option of formatting; when casual is on, format_text picks the
+/// casual prompt (so casual wins if both are on).
+fn wants_formatting(use_formatter: bool, casual: bool) -> bool {
+    use_formatter || casual
+}
+
 /// Privacy paste. Returns true only if the text was staged with the privacy
 /// formats AND actually pulled by the target app.
 fn paste(text: &str) -> bool {
@@ -213,4 +220,17 @@ fn paste(text: &str) -> bool {
     // success for the pill (spec's error table has no entry for this; the
     // log line records it).
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wants_formatting;
+
+    #[test]
+    fn formatting_truth_table() {
+        assert!(!wants_formatting(false, false)); // neither → raw
+        assert!(wants_formatting(true, false));   // formal only
+        assert!(wants_formatting(false, true));   // casual only → still formats
+        assert!(wants_formatting(true, true));    // both → formats (casual wins in format_text)
+    }
 }
