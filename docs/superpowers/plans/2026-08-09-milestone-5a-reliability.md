@@ -73,13 +73,16 @@ pub(crate) fn show_settings_at_key(app: &tauri::AppHandle) {
                                 let (message, detail) = overlay_state::describe_error(&e);
                                 applog::log(&format!("transcribe-error {message} {detail}"));
                                 if matches!(e, groq::GroqError::Unauthorized) {
-                                    crate::show_settings_at_key(&app);
+                                    crate::show_settings_at_key(&ui.app);
                                 }
                                 ui.show_error(my_gen, message);
                             }
 ```
 
-(Opening settings before `show_error` matters: `show_error` sleeps for the pill's two-second hold, so doing it afterwards would delay the window by two seconds.)
+Two things about that snippet:
+
+- It uses `ui.app`, **not** `app`. This code is inside a `move` closure, so naming the outer `app` would move the loop's own handle into the first dictation's thread and the loop could never start another one. `ui` is already moved into this closure and carries its own clone of the handle, so borrowing from it costs nothing and compiles.
+- Opening settings before `show_error` matters: `show_error` sleeps for the pill's two-second hold, so doing it afterwards would delay the window by two seconds.
 
 - [ ] **Step 3: Handle the payload.** In `src/settings.js`, replace the `listen("settings-shown", ...)` line with:
 
