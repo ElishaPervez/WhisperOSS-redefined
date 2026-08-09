@@ -43,6 +43,44 @@ pub fn run() {
             // Overlay: hidden until a dictation starts, never clickable in M1.
             if let Some(w) = app.get_webview_window("overlay") {
                 let _ = w.set_ignore_cursor_events(true);
+                // The pill's material: Windows' transient backdrop, clipped
+                // to rounded antialiased corners. On this build it renders as
+                // translucent smoked grey rather than blurred acrylic — that
+                // appearance IS the approved design (human decision, 5b). If
+                // a later Windows build composites it fully, the same code
+                // gains blur behind the same tint.
+                if let Ok(handle) = w.hwnd() {
+                    use windows::Win32::Graphics::Dwm::{
+                        DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
+                        DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
+                        DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+                    };
+                    use windows::Win32::UI::Controls::MARGINS;
+                    let hwnd = windows::Win32::Foundation::HWND(handle.0);
+                    let pref = DWMWCP_ROUND;
+                    let margins = MARGINS {
+                        cxLeftWidth: -1,
+                        cxRightWidth: -1,
+                        cyTopHeight: -1,
+                        cyBottomHeight: -1,
+                    };
+                    unsafe {
+                        let _ = DwmSetWindowAttribute(
+                            hwnd,
+                            DWMWA_WINDOW_CORNER_PREFERENCE,
+                            &pref as *const _ as *const core::ffi::c_void,
+                            std::mem::size_of_val(&pref) as u32,
+                        );
+                        let _ = DwmExtendFrameIntoClientArea(hwnd, &margins);
+                        let backdrop = DWMSBT_TRANSIENTWINDOW;
+                        let _ = DwmSetWindowAttribute(
+                            hwnd,
+                            DWMWA_SYSTEMBACKDROP_TYPE,
+                            &backdrop as *const _ as *const core::ffi::c_void,
+                            std::mem::size_of_val(&backdrop) as u32,
+                        );
+                    }
+                }
             }
 
             let cfg = config::load();
