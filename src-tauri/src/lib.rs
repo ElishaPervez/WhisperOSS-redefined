@@ -2,6 +2,7 @@ mod applog;
 mod audio;
 mod autostart;
 mod clipboard;
+mod commands;
 mod config;
 mod dsp;
 mod groq;
@@ -20,6 +21,15 @@ use tauri::{Manager, PhysicalPosition};
 
 pub fn run() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            commands::get_settings,
+            commands::has_api_key,
+            commands::set_formatter,
+            commands::set_casual,
+            commands::set_theme,
+            commands::set_autostart,
+            commands::save_api_key,
+        ])
         .setup(|app| {
             applog::log("app-start");
             clipboard::init();
