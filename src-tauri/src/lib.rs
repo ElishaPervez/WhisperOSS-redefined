@@ -1,6 +1,8 @@
 mod applog;
 mod audio;
 mod clipboard;
+#[allow(dead_code)]
+mod config;
 mod dsp;
 mod groq;
 mod hook;
