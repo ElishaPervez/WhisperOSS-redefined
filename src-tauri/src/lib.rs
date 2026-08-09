@@ -21,6 +21,7 @@ use tauri::{Manager, PhysicalPosition, WindowEvent};
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
             commands::has_api_key,
