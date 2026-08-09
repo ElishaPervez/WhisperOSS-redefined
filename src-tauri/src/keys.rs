@@ -39,6 +39,25 @@ pub fn load() -> Option<String> {
     key
 }
 
+/// Pure decision for dictation time: a non-empty vault value wins over the
+/// in-memory snapshot; anything else keeps the snapshot. Returns the key to
+/// use and whether it replaced the snapshot.
+pub fn refreshed_key(current: &str, vault_val: Option<String>) -> (String, bool) {
+    match vault_val {
+        Some(v) if !v.trim().is_empty() => {
+            let changed = v != current;
+            (v, changed)
+        }
+        _ => (current.to_string(), false),
+    }
+}
+
+/// Quiet vault read for the per-dictation refresh: no logging, no env
+/// bootstrap (those are startup concerns handled by `load`).
+pub fn read_vault() -> Option<String> {
+    keyring::Entry::new(SERVICE, ACCOUNT).ok()?.get_password().ok()
+}
+
 /// Persist the key into Windows Credential Manager. Returns false on failure.
 #[allow(dead_code)]
 pub fn save(key: &str) -> bool {
@@ -76,5 +95,26 @@ mod tests {
     fn nothing_available() {
         assert_eq!(resolve(None, None), (None, false));
         assert_eq!(resolve(None, Some("   ".into())), (None, false));
+    }
+
+    #[test]
+    fn refresh_prefers_new_vault_key_and_flags_the_change() {
+        assert_eq!(refreshed_key("sk_old", Some("sk_new".into())),
+                   ("sk_new".into(), true));
+    }
+
+    #[test]
+    fn refresh_with_unchanged_vault_key_is_not_a_change() {
+        assert_eq!(refreshed_key("sk_same", Some("sk_same".into())),
+                   ("sk_same".into(), false));
+    }
+
+    #[test]
+    fn refresh_keeps_memory_key_when_vault_is_unreadable_or_blank() {
+        // A failed or cleared vault read must never wipe a working key
+        // mid-session — dictation falls back to the launch-time snapshot.
+        assert_eq!(refreshed_key("sk_mem", None), ("sk_mem".into(), false));
+        assert_eq!(refreshed_key("sk_mem", Some("   ".into())),
+                   ("sk_mem".into(), false));
     }
 }

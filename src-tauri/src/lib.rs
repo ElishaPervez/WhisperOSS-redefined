@@ -21,6 +21,15 @@ use tauri::{Emitter, Manager, PhysicalPosition, WindowEvent};
 
 pub fn run() {
     tauri::Builder::default()
+        // Must be the first plugin: a second copy of the app (for example a
+        // dev build while the installed one sits in the tray) would otherwise
+        // fight it for the hotkey with its own stale key snapshot. The second
+        // launch hands off and exits; the running copy surfaces its settings
+        // so the launch visibly did something.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            applog::log("second-instance-redirected");
+            show_settings(app);
+        }))
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,

@@ -113,6 +113,10 @@ dictation in flight.
   16 kHz locally, package as WAV in memory (no temp files). Device list
   refresh must not interrupt the live stream. If the chosen mic disappears,
   fall back to the Windows default device.
+- **Single instance** — launching a second copy (for example a dev build
+  while the installed app runs in the tray) hands off to the running copy,
+  which shows its settings window; the second copy exits. Without this, two
+  copies race for the hotkey, each with its own key snapshot.
 - **Groq client** — `reqwest` against Groq's REST API (no SDK).
   Transcription request: 15 s timeout, one automatic retry, cancellable. When
   custom vocabulary is non-empty, it is sent as the transcription `prompt`.
@@ -135,7 +139,10 @@ dictation in flight.
   `theme`, `run_on_startup`, `vocabulary` (list of words, default empty).
   Unknown/missing keys merge onto defaults.
 - **Secrets** — `keyring` crate → Windows Credential Manager, service
-  "WhisperOSS". The API key never appears in `config.json`.
+  "WhisperOSS". The API key never appears in `config.json`. The key is
+  re-read from Credential Manager at each dictation, so a newly saved key
+  takes effect without a restart; if the read fails, the launch-time
+  snapshot is used.
 - **Autostart** — `HKCU\…\Run` value "WhisperOSS" (or `tauri-plugin-autostart`
   if it writes the same key). Reconciled with the toggle at startup.
 - **Tray** — Tauri built-in. Menu: Show settings / Quit. Custom app icon

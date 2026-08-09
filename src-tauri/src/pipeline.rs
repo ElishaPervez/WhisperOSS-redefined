@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use tauri::{Emitter, Manager};
 
-use crate::{applog, clipboard, dsp, groq, hook, hotkey_logic, overlay_state, position};
+use crate::{applog, clipboard, dsp, groq, hook, hotkey_logic, keys, overlay_state, position};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const PASTE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(5);
@@ -152,10 +152,23 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                     );
                     let state = state.clone();
                     std::thread::spawn(move || {
-                        let (key, use_formatter, casual, vocab) = {
+                        // Re-read the vault at dictation time: a key saved in
+                        // settings (or by another launch) must win over this
+                        // process's launch-time snapshot. A failed vault read
+                        // falls back to the snapshot.
+                        let key = {
+                            let mut mem = state.key.lock().unwrap();
+                            let (key, changed) =
+                                keys::refreshed_key(&mem, keys::read_vault());
+                            if changed {
+                                *mem = key.clone();
+                                applog::log("api-key-refreshed-from-vault");
+                            }
+                            key
+                        };
+                        let (use_formatter, casual, vocab) = {
                             let cfg = state.config.lock().unwrap();
                             (
-                                state.key.lock().unwrap().clone(),
                                 cfg.use_formatter,
                                 cfg.casual_mode,
                                 cfg.vocabulary.join(", "),

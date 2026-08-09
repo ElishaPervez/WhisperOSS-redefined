@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Why the API key keeps dying</title>
+<style>
+  :root {
+    --bg: #101014; --panel: #18181f; --panel2: #1f1f28; --text: #e8e8ec;
+    --muted: #9a9aa6; --accent: #e5484d; --ok: #3fb970; --warn: #e5a53d; --line: #2c2c38;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.65 "Segoe UI", system-ui, sans-serif; padding: 40px 24px 80px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin-bottom: 34px; }
+  h2 { font-size: 15px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 44px 0 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 22px 26px; margin-bottom: 14px; }
+  .muted { color: var(--muted); }
+  .ok { color: var(--ok); font-weight: 600; }
+  .bad { color: var(--accent); font-weight: 600; }
+  .warn { color: var(--warn); font-weight: 600; }
+  .big { font-size: 17px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 10px; font-size: 14px; }
+  td, th { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  code { background: var(--panel2); padding: 1px 7px; border-radius: 5px; font: 13px Consolas, monospace; }
+  /* app map */
+  .map { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 12px; }
+  .app { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; font-size: 13.5px; }
+  .app b { display: block; font-size: 14px; margin-bottom: 6px; }
+  .app .tag { display: inline-block; font-size: 11px; letter-spacing: 0.08em; padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); margin-bottom: 8px; }
+  .slot { margin-top: 10px; padding: 8px 10px; border-radius: 6px; border: 1px dashed var(--line); font-size: 12.5px; }
+  .slot.dead { border-color: var(--accent); }
+  /* timeline */
+  .tl { margin-top: 8px; }
+  .tl .ev { display: flex; gap: 16px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .tl .ev:first-child { border-top: 0; }
+  .tl .t { flex: none; width: 84px; font: 600 13px Consolas, monospace; color: var(--muted); }
+  .tl .what { font-size: 14px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; margin-right: 8px; }
+  .g { background: var(--ok); } .r { background: var(--accent); } .y { background: var(--warn); } .n { background: var(--muted); }
+  /* loop */
+  .loop { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .lstep { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 15px; font-size: 13.5px; }
+  .lstep b { color: var(--warn); }
+  ul { margin: 8px 0 0; padding-left: 20px; }
+  li { margin-bottom: 7px; }
+  @media (max-width: 760px) { .map, .loop { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Why the API key keeps dying</h1>
+  <div class="sub">Investigation of 9 August 2026. Everything below was measured on this PC, not guessed.</div>
+
+  <h2>The one-line answer</h2>
+  <div class="card big">
+    <p style="margin:0">Your keys are not being corrupted on this PC. They are being <span class="bad">killed on Groq's side</span>: two different keys, stored in two different vault slots, both went from working to rejected during today, while the stored bytes on this PC did not change at all. A key that works at 19:41 and is refused at 22:44 with zero local changes was revoked at Groq. The remaining question, which only your Groq account page can answer, is what is doing the revoking.</p>
+  </div>
+
+  <h2>What is actually on this PC</h2>
+  <div class="card">
+    <p style="margin-top:0">You do not have one WhisperOSS. You have <b>three generations coexisting</b>, and they do not share one key. That multiplies every key problem.</p>
+    <div class="map">
+      <div class="app">
+        <span class="tag">OLD PYTHON APP</span>
+        <b>WhisperOSS 0.2.1</b>
+        Lives in C:\Users\PC\AppData\Local\Programs\WhisperOSS. Still in active use: its own diagnostics show it dictated successfully at 10:13 this morning and was started again at 20:13 tonight.
+        <div class="slot dead">Key slot "WhisperOSS"<br>last written 22 July<br><span class="bad">Groq now rejects this key</span></div>
+      </div>
+      <div class="app">
+        <span class="tag">INSTALLED NEW APP</span>
+        <b>WhisperOSS 0.1.0</b>
+        Lives in C:\Users\PC\AppData\Local\WhisperOSS. This binary was built and installed TODAY at 20:08 during Codex's testing session. It owns the start-with-Windows entry and is the copy running right now.
+        <div class="slot dead">Key slot "groq_api_key.WhisperOSS"<br>last written today 16:57<br><span class="bad">Groq now rejects this key</span></div>
+      </div>
+      <div class="app">
+        <span class="tag">DEV BUILDS</span>
+        <b>Source builds</b>
+        Launched from the project folder. They read and write the same key slot as the installed new app, so a dev build normally inherits a working key automatically.
+        <div class="slot">Shares the new app's slot. No slot of its own.</div>
+      </div>
+    </div>
+    <p class="muted" style="margin-bottom:0">Both the old and new app react to a hold of Ctrl plus Win. When both are running, whichever one grabs your dictation decides which key gets used, so the same sentence can succeed or fail depending on which app answered. That is part of why the failures feel random.</p>
+  </div>
+
+  <h2>Today, reconstructed from the logs and the vault</h2>
+  <div class="card">
+    <div class="tl">
+      <div class="ev"><div class="t">10:13</div><div class="what"><span class="dot g"></span>Old Python app dictates successfully. Its July key is alive at this point.</div></div>
+      <div class="ev"><div class="t">16:57</div><div class="what"><span class="dot y"></span>A fresh key is saved into the new app's vault slot. This is the last time that slot was ever written.</div></div>
+      <div class="ev"><div class="t">19:41 to 19:43</div><div class="what"><span class="dot g"></span>Six dictations in a row succeed and paste. The 16:57 key is alive and working.</div></div>
+      <div class="ev"><div class="t">20:08 to 20:20</div><div class="what"><span class="dot n"></span>Codex's session builds and installs the new app, runs its feature tests, and starts the old Python app too. At 20:15 an app instance logs "key saved after passing Groq's check", <b>but the real vault slot was never touched</b> (it still says 16:57). Wherever that save went, it was not your vault, so whatever key was entered there is gone.</div></div>
+      <div class="ev"><div class="t">22:44 and 22:45</div><div class="what"><span class="dot r"></span>Your two test dictations fail with "Invalid API key". The app read the 16:57 key and Groq refused it with a real rejection, not a network error.</div></div>
+      <div class="ev"><div class="t">22:52</div><div class="what"><span class="dot r"></span>I pulled both stored keys out of the vault myself and sent each one directly to Groq. Both came back rejected. The bytes on disk are intact and correctly encoded; Groq simply no longer accepts either key.</div></div>
+    </div>
+  </div>
+
+  <h2>Ruled out, with evidence</h2>
+  <div class="card">
+    <table>
+      <tr><th>Theory</th><th>Verdict</th><th>Evidence</th></tr>
+      <tr><td>The new vocabulary feature broke something</td><td class="ok">Ruled out</td><td>The failures use the same request path as before; the 19:41 dictations already carried vocabulary changes and succeeded. The pattern also predates today.</td></tr>
+      <tr><td>The app corrupts the stored key (encoding, truncation)</td><td class="ok">Ruled out</td><td>I read the raw stored bytes: both slots decode cleanly to normal-looking keys, and both were accepted by Groq earlier the same day they were stored.</td></tr>
+      <tr><td>Old and new app overwrite each other's key</td><td class="ok">Ruled out</td><td>They use two differently named vault slots. Timestamps prove neither wrote the other's slot.</td></tr>
+      <tr><td>A leftover environment variable restores an old key</td><td class="ok">Ruled out</td><td>That variable does not exist on this machine, and the log never shows the bootstrap event that would use it.</td></tr>
+      <tr><td>The key leaked through the GitHub repo and Groq auto-revoked it</td><td class="ok">Ruled out</td><td>I searched every commit in the repo's history. The only key-shaped strings are short fake placeholders. No real key was ever committed.</td></tr>
+      <tr><td>Keys are being revoked on Groq's side</td><td class="bad">Confirmed</td><td>Two independent keys, in untouched storage, both alive this morning or evening and both rejected tonight. Only the server side can do that.</td></tr>
+    </table>
+  </div>
+
+  <h2>The loop you have been living in</h2>
+  <div class="card">
+    <p style="margin-top:0">Groq shows a key's full value exactly once, at creation. You cannot go back and re-copy an existing key. That fact plus the revocations produces the exact cycle you described:</p>
+    <div class="loop">
+      <div class="lstep"><b>1. Dev run shows "invalid key".</b> The dev build reads the shared vault slot, which holds a key Groq has already revoked.</div>
+      <div class="lstep"><b>2. You cannot re-enter the old key</b> because Groq will not show it again, so you create a new key in the Groq console. If the old ones get deleted or regenerated in the process, every app still holding them dies at that moment, including the installed one. That is the "it breaks the installed app too".</div>
+      <div class="lstep"><b>3. The new key works "temporarily".</b> It is genuinely valid, and whichever app you typed it into works.</div>
+      <div class="lstep"><b>4. The save sometimes lands nowhere.</b> Tonight at 20:15 a validated key save never reached your real vault. Any key entered into an app instance that an AI agent session launched can vanish this way, and the vault quietly keeps the dead key, restarting the loop at step 1.</div>
+    </div>
+  </div>
+
+  <h2>What only you can check</h2>
+  <div class="card">
+    <p style="margin-top:0">Open <b>console.groq.com</b> and look at the API keys page and your email from Groq:</p>
+    <ul>
+      <li>How many keys exist right now, and do their creation dates match today 16:57 and earlier? If keys you created are missing, something or someone deleted them.</li>
+      <li>Any email from Groq tonight about a key being disabled, detected as exposed, or your account being flagged? That would mean Groq is auto-revoking and we need to find the exposure.</li>
+      <li>Think back to tonight between 20:15 and 22:45: did you create, regenerate, or delete any key in the console? Regenerating or deleting is precisely what kills the copy the installed app still holds.</li>
+    </ul>
+  </div>
+
+  <h2>How to exit the loop right now</h2>
+  <div class="card">
+    <ul style="margin-top:0">
+      <li><b>Create ONE new key</b> in the Groq console. Do not delete or regenerate anything else while you do it.</li>
+      <li><b>Enter it in the installed new app's own settings window</b> (open it from the tray icon), not in a dev instance that an agent session launched. That writes your real vault, and dev builds you launch yourself will inherit it automatically.</li>
+      <li><b>Decide the old Python app's fate.</b> It dictated as recently as this morning, listens to the same hotkey, and keeps its own separate key copy that dies on every rotation. If you still want it, give it the same new key; if not, uninstall it from C:\Users\PC\AppData\Local\Programs\WhisperOSS and the confusion drops sharply.</li>
+      <li><b>Never type a key into an app window that I or Codex launched.</b> Tonight's evidence shows such a save can pass validation and still land outside your real vault.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>
