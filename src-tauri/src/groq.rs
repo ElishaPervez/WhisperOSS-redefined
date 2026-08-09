@@ -6,6 +6,7 @@ use std::time::Duration;
 
 pub const PROD_BASE_URL: &str = "https://api.groq.com";
 const MODEL: &str = "whisper-large-v3-turbo";
+const FORMAT_MODEL: &str = "openai/gpt-oss-120b";
 
 #[derive(Debug)]
 pub enum GroqError {
@@ -67,6 +68,72 @@ impl GroqClient {
                     resp.json().map_err(|e| GroqError::Network(e.to_string()))?;
                 Ok(v["text"].as_str().unwrap_or_default().trim().to_string())
             }
+            401 | 403 => Err(GroqError::Unauthorized),
+            s => Err(GroqError::Server(format!("HTTP {s}"))),
+        }
+    }
+
+    /// Optional cleanup pass (spec §2). Same retry discipline as transcribe.
+    #[allow(dead_code)]
+    pub fn format_text(&self, text: &str, casual: bool) -> Result<String, GroqError> {
+        let mut last = None;
+        for _ in 0..2 {
+            match self.format_attempt(text, casual) {
+                Ok(t) => return Ok(t),
+                Err(GroqError::Unauthorized) => return Err(GroqError::Unauthorized),
+                Err(e) => last = Some(e),
+            }
+        }
+        Err(last.expect("at least one attempt ran"))
+    }
+
+    fn format_attempt(&self, text: &str, casual: bool) -> Result<String, GroqError> {
+        let prompt = if casual {
+            crate::prompts::CASUAL_PROMPT
+        } else {
+            crate::prompts::FORMAT_PROMPT
+        };
+        let body = serde_json::json!({
+            "model": FORMAT_MODEL,
+            "temperature": 0.3,
+            "messages": [
+                { "role": "system", "content": prompt },
+                { "role": "user", "content": text },
+            ],
+        });
+        let resp = self
+            .http
+            .post(format!("{}/openai/v1/chat/completions", self.base))
+            .bearer_auth(&self.key)
+            .json(&body)
+            .send()
+            .map_err(|e| GroqError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => {
+                let v: serde_json::Value =
+                    resp.json().map_err(|e| GroqError::Network(e.to_string()))?;
+                Ok(v["choices"][0]["message"]["content"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string())
+            }
+            401 | 403 => Err(GroqError::Unauthorized),
+            s => Err(GroqError::Server(format!("HTTP {s}"))),
+        }
+    }
+
+    /// Cheap key check for the settings Save button (M3b).
+    #[allow(dead_code)]
+    pub fn validate_key(&self) -> Result<(), GroqError> {
+        let resp = self
+            .http
+            .get(format!("{}/openai/v1/models", self.base))
+            .bearer_auth(&self.key)
+            .send()
+            .map_err(|e| GroqError::Network(e.to_string()))?;
+        match resp.status().as_u16() {
+            200 => Ok(()),
             401 | 403 => Err(GroqError::Unauthorized),
             s => Err(GroqError::Server(format!("HTTP {s}"))),
         }
@@ -148,5 +215,32 @@ mod tests {
         });
         let c = client(format!("http://{addr}"));
         assert!(matches!(c.transcribe(vec![0u8; 16]), Err(GroqError::Server(_))));
+    }
+
+    #[test]
+    fn format_text_sends_chat_and_returns_content() {
+        let base = serve_once(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\nconnection: close\r\n\r\n{\"choices\":[{\"message\":{\"content\":\" Hello, world. \"}}]}",
+        );
+        let c = client(base);
+        assert_eq!(c.format_text("hello world", false).unwrap(), "Hello, world.");
+    }
+
+    #[test]
+    fn format_text_unauthorized_maps() {
+        let base = serve_once("HTTP/1.1 401 Unauthorized\r\nconnection: close\r\n\r\n{}");
+        assert!(matches!(client(base).format_text("x", true),
+                         Err(GroqError::Unauthorized)));
+    }
+
+    #[test]
+    fn validate_key_ok_and_unauthorized() {
+        let base = serve_once(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\nconnection: close\r\n\r\n{\"data\":[]}",
+        );
+        assert!(client(base).validate_key().is_ok());
+        let base = serve_once("HTTP/1.1 401 Unauthorized\r\nconnection: close\r\n\r\n{}");
+        assert!(matches!(client(base).validate_key(),
+                         Err(GroqError::Unauthorized)));
     }
 }

@@ -11,6 +11,7 @@ mod keys;
 mod overlay_state;
 mod pipeline;
 mod position;
+mod prompts;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
