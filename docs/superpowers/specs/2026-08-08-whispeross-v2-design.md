@@ -172,12 +172,18 @@ dialogs, no permanently stuck states.
 
 | Failure | Behavior |
 |---|---|
-| No microphone found | "No mic detected"; auto-fallback to Windows default when one appears |
+| No microphone found | "No mic detected"; the audio stream retries every 2 s, so a device that is plugged in, re-enabled, or freed by another app is picked up without a restart |
 | Network unreachable / timeout | one retry, then "Couldn't reach Groq" |
 | API key rejected (401) | "Invalid API key" + settings window opens to the key field |
-| Groq server error (5xx) | one retry, then "Groq error — try again" |
+| Groq server error (5xx) | one retry, then "Groq error" |
 | Privacy clipboard flags can't be set | abort paste, "Couldn't paste safely" — never fall back to an unflagged paste |
 | Mic vanishes mid-recording | finish with what was captured if >minimum, else error pill |
+| Selected mic can't be opened | falls back to the Windows default and the settings window shows "unavailable, using <device>" beside the picker |
+
+The pill is 120 px wide, so messages are kept to roughly twenty characters.
+"Groq error" rather than "Groq error — try again" for that reason, and because
+the app has already retried once by the time the message appears — telling the
+user to try again would be describing work it just did.
 
 Diagnostics: a plain-text log (`%APPDATA%\WhisperOSS\log.txt`, size-capped,
 no transcript contents — timestamps and event names only).
