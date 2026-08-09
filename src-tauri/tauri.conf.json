@@ -3,6 +3,7 @@
   "productName": "WhisperOSS",
   "version": "0.1.0",
   "identifier": "com.whispeross.app",
+  "mainBinaryName": "WhisperOSS",
   "build": {
     "frontendDist": "../src"
   },
