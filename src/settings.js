@@ -68,14 +68,8 @@ async function loadMics(selected) {
   sel.value = selected || "";
 }
 
-async function load() {
+async function refreshMic() {
   const cfg = await invoke("get_settings");
-  paintToggle(el("formatter"), cfg.use_formatter);
-  paintToggle(el("casual"), cfg.casual_mode);
-  paintToggle(el("autostart"), cfg.run_on_startup);
-  applyTheme(cfg.theme);
-
-  renderCombo(cfg.hotkey);
   await loadMics(cfg.input_device);
   const mic = await invoke("microphone_status");
   const note = el("mic-note");
@@ -86,6 +80,17 @@ async function load() {
   } else {
     note.textContent = "";
   }
+}
+
+async function load() {
+  const cfg = await invoke("get_settings");
+  paintToggle(el("formatter"), cfg.use_formatter);
+  paintToggle(el("casual"), cfg.casual_mode);
+  paintToggle(el("autostart"), cfg.run_on_startup);
+  applyTheme(cfg.theme);
+
+  renderCombo(cfg.hotkey);
+  await refreshMic();
 
   const hasKey = await invoke("has_api_key");
   if (hasKey) {
@@ -165,5 +170,8 @@ listen("settings-shown", async ({ payload }) => {
     setKeyFeedback("Groq rejected this key — paste a new one", "err");
   }
 });
+
+// The engine can change microphone underneath an already-open window.
+listen("mic-changed", () => refreshMic());
 
 load();
