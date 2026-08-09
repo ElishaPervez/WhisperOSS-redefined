@@ -12,6 +12,7 @@ mod overlay_state;
 mod pipeline;
 mod position;
 mod prompts;
+mod state;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -29,21 +30,20 @@ pub fn run() {
             }
 
             let cfg = config::load();
-            config::save(&cfg); // materialize the file with defaults on first run
+            config::save(&cfg);
             autostart::reconcile(cfg.run_on_startup);
+
+            let key = keys::load().unwrap_or_default();
+            let app_state = state::AppState::new(cfg.clone(), key.clone());
+            app.manage(app_state.clone());
 
             let audio_engine =
                 audio::AudioEngine::start(app.handle().clone(), cfg.input_device.clone());
 
-            match keys::load() {
-                Some(key) => pipeline::start(
-                    app.handle().clone(),
-                    audio_engine,
-                    key,
-                    cfg,
-                ),
-                None => applog::log("pipeline-not-started-no-key"),
+            if key.is_empty() {
+                applog::log("pipeline-started-without-key");
             }
+            pipeline::start(app.handle().clone(), audio_engine, app_state);
 
             let quit = MenuItem::with_id(app, "quit", "Quit WhisperOSS", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;

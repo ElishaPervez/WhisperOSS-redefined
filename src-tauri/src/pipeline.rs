@@ -68,29 +68,23 @@ impl Ui {
     }
 }
 
-pub fn start(
-    app: tauri::AppHandle,
-    audio: Arc<audio::AudioEngine>,
-    api_key: String,
-    cfg: crate::config::Config,
-) {
+pub fn start(app: tauri::AppHandle, audio: Arc<audio::AudioEngine>, state: crate::state::AppState) {
     let (tx, rx) = channel();
     hook::spawn(tx);
 
-    let combo = hotkey_logic::parse_combo(&cfg.hotkey).unwrap_or_else(|| {
-        applog::log("config-invalid-hotkey-using-default");
-        hotkey_logic::parse_combo(&["ctrl".into(), "win".into()]).expect("default combo")
-    });
-    hook::set_suppression(hotkey_logic::combo_other_vk(&combo),
-                          &combo.iter().copied().filter(|k| k.is_modifier()).collect::<Vec<_>>());
+    // Combo is read once here (live rebind is Milestone 3c).
+    let combo = {
+        let cfg = state.config.lock().unwrap();
+        hotkey_logic::parse_combo(&cfg.hotkey).unwrap_or_else(|| {
+            applog::log("config-invalid-hotkey-using-default");
+            hotkey_logic::parse_combo(&["ctrl".into(), "win".into()]).expect("default combo")
+        })
+    };
+    hook::set_suppression(
+        hotkey_logic::combo_other_vk(&combo),
+        &combo.iter().copied().filter(|k| k.is_modifier()).collect::<Vec<_>>(),
+    );
 
-    let use_formatter = cfg.use_formatter;
-    let casual = cfg.casual_mode;
-    let client = Arc::new(groq::GroqClient::new(
-        api_key,
-        groq::PROD_BASE_URL.to_string(),
-        REQUEST_TIMEOUT,
-    ));
     let generation = Arc::new(AtomicU64::new(0));
 
     std::thread::spawn(move || {
@@ -138,8 +132,17 @@ pub fn start(
                         &dsp::resample_to_16k(&samples, rate),
                         16_000,
                     );
-                    let client = client.clone();
+                    let state = state.clone();
                     std::thread::spawn(move || {
+                        let (key, use_formatter, casual) = {
+                            let cfg = state.config.lock().unwrap();
+                            (state.key.lock().unwrap().clone(), cfg.use_formatter, cfg.casual_mode)
+                        };
+                        let client = groq::GroqClient::new(
+                            key,
+                            groq::PROD_BASE_URL.to_string(),
+                            REQUEST_TIMEOUT,
+                        );
                         match client.transcribe(wav) {
                             Ok(_) if !ui.current(my_gen) => {
                                 applog::log("result-discarded-stale");

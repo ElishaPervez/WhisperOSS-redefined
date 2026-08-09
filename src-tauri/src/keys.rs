@@ -39,6 +39,23 @@ pub fn load() -> Option<String> {
     key
 }
 
+/// Persist the key into Windows Credential Manager. Returns false on failure.
+#[allow(dead_code)]
+pub fn save(key: &str) -> bool {
+    match keyring::Entry::new(SERVICE, ACCOUNT) {
+        Ok(entry) => {
+            let ok = entry.set_password(key).is_ok();
+            if ok {
+                applog::log("api-key-saved");
+            } else {
+                applog::log("api-key-save-failed");
+            }
+            ok
+        }
+        Err(_) => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
