@@ -167,7 +167,7 @@ listen("settings-shown", async ({ payload }) => {
     input.value = "";
     input.type = "password";
     input.focus();
-    setKeyFeedback("Groq rejected this key — paste a new one", "err");
+    setKeyFeedback("Groq rejected this key, paste a new one", "err");
   }
 });
 

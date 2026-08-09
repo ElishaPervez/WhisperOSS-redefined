@@ -82,7 +82,7 @@ pub fn save_api_key(state: State<AppState>, key: String) -> Result<(), String> {
         }
         Err(groq::GroqError::Unauthorized) => Err("Groq rejected this key".into()),
         Err(groq::GroqError::Network(_)) => Err("Couldn't reach Groq".into()),
-        Err(groq::GroqError::Server(_)) => Err("Groq error — try again".into()),
+        Err(groq::GroqError::Server(_)) => Err("Groq error, try again".into()),
     }
 }
 
