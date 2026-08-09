@@ -17,7 +17,7 @@ mod state;
 
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
-use tauri::{Manager, PhysicalPosition, WindowEvent};
+use tauri::{Emitter, Manager, PhysicalPosition, WindowEvent};
 
 pub fn run() {
     tauri::Builder::default()
@@ -107,6 +107,9 @@ pub(crate) fn show_settings(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("settings") {
         let _ = w.show();
         let _ = w.set_focus();
+        // The webview loaded once, at startup, while this window was hidden.
+        // Tell it to re-read everything so it never shows stale values.
+        let _ = w.emit("settings-shown", ());
     }
 }
 

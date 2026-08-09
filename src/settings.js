@@ -1,5 +1,6 @@
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow } = window.__TAURI__.window;
+const { listen } = window.__TAURI__.event;
 
 const win = getCurrentWindow();
 document.getElementById("min").onclick = () => win.minimize();
@@ -81,6 +82,9 @@ async function load() {
   if (hasKey) {
     el("api-key").placeholder = "••••••••••••••••";
     setKeyFeedback("Saved", "ok");
+  } else {
+    el("api-key").placeholder = "gsk_…";
+    setKeyFeedback("", "");
   }
 }
 
@@ -139,5 +143,9 @@ el("mic").onchange = async () => {
   await invoke("set_microphone", { value: value || null });
   el("status-text").textContent = "Microphone updated";
 };
+
+// The window is hidden rather than destroyed when closed, so the webview is
+// only ever loaded once. Re-read on every open.
+listen("settings-shown", () => load());
 
 load();
