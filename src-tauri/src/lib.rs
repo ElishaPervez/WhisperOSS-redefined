@@ -44,16 +44,15 @@ pub fn run() {
             autostart::reconcile(cfg.run_on_startup);
 
             let key = keys::load().unwrap_or_default();
-            let app_state = state::AppState::new(cfg.clone(), key.clone());
-            app.manage(app_state.clone());
-
             let audio_engine =
                 audio::AudioEngine::start(app.handle().clone(), cfg.input_device.clone());
+            let app_state = state::AppState::new(cfg.clone(), key.clone(), audio_engine);
+            app.manage(app_state.clone());
 
             if key.is_empty() {
                 applog::log("pipeline-started-without-key");
             }
-            pipeline::start(app.handle().clone(), audio_engine, app_state);
+            pipeline::start(app.handle().clone(), app_state);
 
             let show = MenuItem::with_id(app, "show", "Show settings", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit WhisperOSS", true, None::<&str>)?;

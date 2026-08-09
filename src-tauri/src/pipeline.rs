@@ -11,9 +11,7 @@ use std::time::Duration;
 
 use tauri::{Emitter, Manager};
 
-use crate::{
-    applog, audio, clipboard, dsp, groq, hook, hotkey_logic, overlay_state,
-};
+use crate::{applog, clipboard, dsp, groq, hook, hotkey_logic, overlay_state};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const PASTE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(5);
@@ -68,28 +66,99 @@ impl Ui {
     }
 }
 
-pub fn start(app: tauri::AppHandle, audio: Arc<audio::AudioEngine>, state: crate::state::AppState) {
+/// The combo the tracker should be using right now, read from config.
+fn combo_from_config(state: &crate::state::AppState) -> Vec<hotkey_logic::Key> {
+    let cfg = state.config.lock().unwrap();
+    hotkey_logic::parse_combo(&cfg.hotkey).unwrap_or_else(|| {
+        applog::log("config-invalid-hotkey-using-default");
+        hotkey_logic::parse_combo(&["ctrl".into(), "win".into()]).expect("default combo")
+    })
+}
+
+fn apply_combo(combo: &[hotkey_logic::Key]) {
+    hook::set_suppression(
+        hotkey_logic::combo_other_vk(combo),
+        &combo.iter().copied().filter(|k| k.is_modifier()).collect::<Vec<_>>(),
+    );
+}
+
+/// Tell the settings window what the rebind is doing. `keys` that have no
+/// config name (an F-key mid-press) come through as an empty preview; the
+/// release then reports them as invalid.
+fn emit_hotkey(app: &tauri::AppHandle, phase: &str, keys: &[hotkey_logic::Key]) {
+    let names = hotkey_logic::combo_names(keys).unwrap_or_default();
+    let _ = app.emit("hotkey", serde_json::json!({ "phase": phase, "keys": names }));
+}
+
+fn end_capture(state: &crate::state::AppState) {
+    state.capturing.store(false, Ordering::SeqCst);
+    state.capture_gen.fetch_add(1, Ordering::SeqCst);
+    hook::set_capture(false);
+}
+
+pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
     let (tx, rx) = channel();
     hook::spawn(tx);
 
-    // Combo is read once here (live rebind is Milestone 3c).
-    let combo = {
-        let cfg = state.config.lock().unwrap();
-        hotkey_logic::parse_combo(&cfg.hotkey).unwrap_or_else(|| {
-            applog::log("config-invalid-hotkey-using-default");
-            hotkey_logic::parse_combo(&["ctrl".into(), "win".into()]).expect("default combo")
-        })
-    };
-    hook::set_suppression(
-        hotkey_logic::combo_other_vk(&combo),
-        &combo.iter().copied().filter(|k| k.is_modifier()).collect::<Vec<_>>(),
-    );
-
-    let generation = Arc::new(AtomicU64::new(0));
+    let audio = state.audio.clone();
+    let generation = state.generation.clone();
+    let combo = combo_from_config(&state);
+    apply_combo(&combo);
 
     std::thread::spawn(move || {
         let mut tracker = hotkey_logic::HoldTracker::new(combo);
+        let mut capture = hotkey_logic::CaptureBuffer::new();
+        let mut was_capturing = false;
+
         for ev in rx {
+            if state.capturing.load(Ordering::SeqCst) {
+                if !was_capturing {
+                    capture = hotkey_logic::CaptureBuffer::new();
+                    was_capturing = true;
+                }
+                match capture.on_event(ev) {
+                    hotkey_logic::Capture::Pending(keys) => {
+                        emit_hotkey(&app, "preview", &keys);
+                    }
+                    hotkey_logic::Capture::Done(keys) => {
+                        let names =
+                            hotkey_logic::combo_names(&keys).expect("validated at capture");
+                        {
+                            let mut cfg = state.config.lock().unwrap();
+                            cfg.hotkey = names;
+                            crate::config::save(&cfg);
+                        }
+                        apply_combo(&keys);
+                        tracker = hotkey_logic::HoldTracker::new(keys.clone());
+                        end_capture(&state);
+                        was_capturing = false;
+                        applog::log("hotkey-rebound");
+                        emit_hotkey(&app, "set", &keys);
+                    }
+                    hotkey_logic::Capture::Invalid => {
+                        end_capture(&state);
+                        was_capturing = false;
+                        applog::log("hotkey-capture-invalid");
+                        emit_hotkey(&app, "invalid", &[]);
+                    }
+                    hotkey_logic::Capture::Cancelled => {
+                        end_capture(&state);
+                        was_capturing = false;
+                        applog::log("hotkey-capture-cancelled");
+                        emit_hotkey(&app, "cancelled", &[]);
+                    }
+                }
+                continue;
+            }
+
+            if was_capturing {
+                // Capture ended from outside (watchdog, or the window lost
+                // focus). Rebuild the tracker so keys held during capture
+                // cannot look like the start of a dictation.
+                was_capturing = false;
+                tracker = hotkey_logic::HoldTracker::new(combo_from_config(&state));
+            }
+
             match tracker.on_event(ev) {
                 hotkey_logic::Action::None => {}
                 hotkey_logic::Action::Start => {
