@@ -3143,21 +3143,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scaffold-tmp"
-version = "0.1.0"
-dependencies = [
- "cpal",
- "keyring",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "windows 0.61.3",
-]
-
-[[package]]
 name = "schannel"
 version = "0.1.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4761,6 +4746,21 @@ dependencies = [
  "thiserror 2.0.20",
  "windows 0.61.3",
  "windows-core 0.61.2",
+]
+
+[[package]]
+name = "whispeross"
+version = "0.1.0"
+dependencies = [
+ "cpal",
+ "keyring",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "windows 0.61.3",
 ]
 
 [[package]]
