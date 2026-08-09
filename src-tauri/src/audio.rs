@@ -75,7 +75,7 @@ impl AudioEngine {
         std::thread::spawn(move || {
             use std::sync::mpsc::RecvTimeoutError;
             let mut wanted = preferred;
-            let mut stream = open(&e, &wanted);
+            let mut stream = open(&e, &wanted, false);
             loop {
                 match device_rx.recv_timeout(Duration::from_secs(2)) {
                     Ok(next) => {
@@ -84,7 +84,7 @@ impl AudioEngine {
                         drop(stream.take());
                         e.reset_buffers();
                         wanted = next;
-                        stream = open(&e, &wanted);
+                        stream = open(&e, &wanted, true);
                     }
                     Err(RecvTimeoutError::Timeout) => {
                         // Nobody asked for a change. If there is no working
@@ -195,26 +195,36 @@ fn build_with_fallback(
 
 /// Build and start a stream, keeping the healthy flag honest. A dictation
 /// attempted while this is None gets the "No mic detected" pill.
-fn open(engine: &Arc<AudioEngine>, preferred: &Option<String>) -> Option<cpal::Stream> {
+fn open(
+    engine: &Arc<AudioEngine>,
+    preferred: &Option<String>,
+    announce: bool,
+) -> Option<cpal::Stream> {
     engine.healthy.store(false, Ordering::SeqCst);
     match build_with_fallback(engine, preferred, true) {
         Ok(stream) => {
             if stream.play().is_ok() {
                 engine.healthy.store(true, Ordering::SeqCst);
                 applog::log("audio-stream-started");
-                engine.announce_change();
+                if announce {
+                    engine.announce_change();
+                }
                 Some(stream)
             } else {
                 applog::log("audio-stream-play-failed");
                 *engine.active_device.lock().unwrap() = None;
-                engine.announce_change();
+                if announce {
+                    engine.announce_change();
+                }
                 None
             }
         }
         Err(msg) => {
             applog::log(&format!("audio-stream-error {msg}"));
             *engine.active_device.lock().unwrap() = None;
-            engine.announce_change();
+            if announce {
+                engine.announce_change();
+            }
             None
         }
     }
