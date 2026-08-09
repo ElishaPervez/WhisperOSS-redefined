@@ -74,19 +74,25 @@ Run: `cargo check`. Expected: errors in `hook.rs`, `pipeline.rs`, and `commands.
 **Files:**
 - Modify: `src-tauri/src/hook.rs`
 
-- [ ] **Step 1: Delete the capture flag and its accessors.** Remove:
+- [ ] **Step 1: Delete the capture flag, the diagnostic flag, and their accessors.** Remove:
 
 - the `static CAPTURE: AtomicBool = AtomicBool::new(false);` line and the comment above it
+- the `static DIAG: AtomicBool = AtomicBool::new(false);` line and the comment above it
 - the whole `pub fn set_capture` function and its doc comment
 - the whole `pub fn is_capturing` function and its doc comment
-- if a `static DIAG` / `pub fn set_diag` exists, remove those too (round-2 instrumentation; it may never have been applied)
+- the whole `pub fn set_diag` function
 
-- [ ] **Step 2: Delete the swallow block from `hook_proc`.** Remove this block entirely:
+- [ ] **Step 2: Delete the swallow block from `hook_proc`.** Remove these ten lines entirely:
 
 ```rust
-            if CAPTURE.load(Ordering::SeqCst) {
+            let capture_on = CAPTURE.load(Ordering::SeqCst);
+            if DIAG.load(Ordering::SeqCst) {
                 // Diagnostic only — no key identity, per the privacy rule.
-                crate::applog::log(if down { "hook-swallow-down" } else { "hook-swallow-up" });
+                crate::applog::log(&format!(
+                    "hook-key down={down} capture={capture_on}"
+                ));
+            }
+            if capture_on {
                 return LRESULT(1);
             }
 ```
@@ -146,7 +152,7 @@ That deletes: the `capture` and `was_capturing` locals, the `pipeline-capture-fl
 - Modify: `src-tauri/src/state.rs`
 - Modify: `src-tauri/src/lib.rs`
 
-- [ ] **Step 1: Delete the commands.** In `src-tauri/src/commands.rs`, remove the whole `begin_hotkey_capture` function (including its doc comment and the watchdog thread inside it) and the whole `cancel_hotkey_capture` function. If a `report_blur` command exists, remove that too.
+- [ ] **Step 1: Delete the commands.** In `src-tauri/src/commands.rs`, remove the whole `begin_hotkey_capture` function (including its doc comment and the watchdog thread inside it), the whole `cancel_hotkey_capture` function, and the whole `report_blur` function. The `hook::set_diag(...)` calls live inside these functions and go with them.
 
 Keep everything else, including `list_microphones` and `set_microphone`.
 
@@ -173,9 +179,8 @@ Keep `config`, `key`, `audio`, and `generation`.
 ```rust
             commands::begin_hotkey_capture,
             commands::cancel_hotkey_capture,
+            commands::report_blur,
 ```
-
-(and `commands::report_blur,` if present).
 
 - [ ] **Step 5: Verify**
 
