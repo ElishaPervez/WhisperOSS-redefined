@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>WhisperOSS — Where we are</title>
+<style>
+  :root {
+    --bg: #141312; --panel: #1c1a19; --panel2: #232120;
+    --text: #f3f2f2; --muted: #a09c99; --dim: #6f6a67;
+    --accent: #ff563c; --done: #3fb970; --now: #f0b429; --todo: #4a4644;
+    --line: #302d2b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 56px 40px 100px; }
+
+  h1 { font-size: 42px; letter-spacing: -0.03em; margin: 0 0 6px; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 17px; margin-bottom: 44px; }
+  h2 {
+    font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted); margin: 54px 0 18px; font-weight: 700;
+  }
+  h3 { font-size: 19px; margin: 0 0 6px; font-weight: 700; }
+  p { margin: 0 0 14px; }
+  .mark { width: 11px; height: 11px; background: var(--accent); display: inline-block; }
+
+  /* headline answer */
+  .answer {
+    background: var(--panel); border-left: 3px solid var(--accent);
+    padding: 26px 30px; margin-bottom: 10px;
+  }
+  .answer .big { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 8px; }
+  .answer p { color: var(--muted); margin: 0; }
+  .answer strong { color: var(--text); }
+
+  /* progress bar */
+  .bar { display: flex; height: 34px; margin: 30px 0 8px; border: 1px solid var(--line); }
+  .seg { display: flex; align-items: center; justify-content: center;
+         font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #14120f; }
+  .seg.done { background: var(--done); }
+  .seg.now  { background: var(--now); }
+  .seg.todo { background: var(--todo); color: var(--muted); }
+  .barkey { display: flex; gap: 22px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .barkey span { display: flex; align-items: center; gap: 7px; }
+  .chip { width: 11px; height: 11px; display: inline-block; }
+
+  /* timeline */
+  .stage {
+    display: grid; grid-template-columns: 46px 1fr; gap: 20px;
+    padding: 22px 0; border-top: 1px solid var(--line);
+  }
+  .stage:last-child { border-bottom: 1px solid var(--line); }
+  .num {
+    width: 40px; height: 40px; display: flex; align-items: center;
+    justify-content: center; font-weight: 700; font-size: 15px;
+  }
+  .num.done { background: var(--done); color: #10240f; }
+  .num.now  { background: var(--now); color: #241c05; }
+  .num.todo { background: var(--panel2); color: var(--dim); border: 1px solid var(--line); }
+  .stage .what { color: var(--muted); }
+  .stage .what strong { color: var(--text); font-weight: 600; }
+  .tag {
+    display: inline-block; font-size: 10px; letter-spacing: 0.12em; font-weight: 700;
+    padding: 3px 8px; margin-left: 10px; vertical-align: 3px;
+  }
+  .tag.done { background: rgba(63,185,112,0.15); color: var(--done); }
+  .tag.now  { background: rgba(240,180,41,0.15); color: var(--now); }
+  .tag.todo { background: var(--panel2); color: var(--dim); }
+  .proof { font-size: 12px; color: var(--dim); margin-top: 7px; }
+
+  /* cards */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card { background: var(--panel); padding: 22px 24px; }
+  .card h3 { font-size: 16px; }
+  .card p { font-size: 14px; color: var(--muted); margin: 0; }
+
+  .list { list-style: none; padding: 0; margin: 0; }
+  .list li {
+    padding: 15px 0 15px 26px; border-bottom: 1px solid var(--line);
+    position: relative; color: var(--muted); font-size: 14px;
+  }
+  .list li:before {
+    content: ""; position: absolute; left: 0; top: 21px;
+    width: 9px; height: 9px; background: var(--accent);
+  }
+  .list li strong { color: var(--text); display: block; font-size: 15px; margin-bottom: 3px; font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; }
+  td.n { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; }
+
+  .note { background: var(--panel2); padding: 20px 24px; color: var(--muted); font-size: 14px; margin-top: 18px; }
+  .note strong { color: var(--text); }
+
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 8px 0 4px; flex-wrap: wrap; }
+  .box {
+    background: var(--panel); border: 1px solid var(--line); padding: 13px 15px;
+    font-size: 12.5px; color: var(--muted); flex: 1; min-width: 118px;
+  }
+  .box b { display: block; color: var(--text); font-size: 13px; margin-bottom: 2px; font-weight: 600; }
+  .arrow { display: flex; align-items: center; padding: 0 8px; color: var(--dim); font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="mark"></div>
+  <h1>WhisperOSS — where we are</h1>
+  <div class="sub">Status as of 9 August 2026 · 71 commits · 2,281 lines of Rust, 712 of interface</div>
+
+  <div class="answer">
+    <div class="big">The app is finished and working. What's left is polish.</div>
+    <p>You can install it, dictate into any Windows app, and change its settings today.
+    Everything from here on makes it harder to break and nicer to look at —
+    <strong>not</strong> more capable.</p>
+  </div>
+
+  <h2>Six stages, and we're in the fifth</h2>
+
+  <div class="bar">
+    <div class="seg done" style="flex:1">0</div>
+    <div class="seg done" style="flex:1">1</div>
+    <div class="seg done" style="flex:1">2</div>
+    <div class="seg done" style="flex:1.6">3</div>
+    <div class="seg now"  style="flex:1.2">4</div>
+    <div class="seg todo" style="flex:1.2">5</div>
+  </div>
+  <div class="barkey">
+    <span><i class="chip" style="background:var(--done)"></i> done &amp; verified by you</span>
+    <span><i class="chip" style="background:var(--now)"></i> in progress right now</span>
+    <span><i class="chip" style="background:var(--todo)"></i> not started</span>
+  </div>
+
+  <div class="stage">
+    <div class="num done">0</div>
+    <div>
+      <h3>Prove the hard part first <span class="tag done">DONE</span></h3>
+      <div class="what">The floating bar that appears while you speak has to hover over every other
+      window <strong>and let your clicks pass straight through it</strong>. If that couldn't be done,
+      the whole approach was wrong — so it was built first, alone, before anything else.</div>
+      <div class="proof">You confirmed: 60 frames per second, even over a playing video.</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="num done">1</div>
+    <div>
+      <h3>Make it actually dictate <span class="tag done">DONE</span></h3>
+      <div class="what">Hold the keys, speak, release, and text appears — the entire job, working,
+      with no settings screen at all. Your clipboard is put back exactly as it was, and the
+      transcript is marked so Windows won't sync it to the cloud or store it in clipboard history.</div>
+      <div class="proof">You confirmed: 9 of 9 checks, including clipboard restore and offline behaviour.</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="num done">2</div>
+    <div>
+      <h3>Make the bar respond to your voice <span class="tag done">DONE</span></h3>
+      <div class="what">The bar now shows what's really happening — bars moving with your actual
+      volume, then a working state, then a tick or a red error message that explains itself.</div>
+      <div class="proof">You confirmed: 6 of 6 checks.</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="num done">3</div>
+    <div>
+      <h3>The settings window <span class="tag done">DONE</span></h3>
+      <div class="what">Your API key, AI tidy-up, casual mode, microphone choice, light/dark theme,
+      and start-with-Windows — all changeable, all taking effect immediately, none needing a restart.
+      Built in three passes because it kept turning up real problems.</div>
+      <div class="proof">Three rounds of your testing. Four defects found and fixed. One feature
+      (changing the shortcut) was dropped after it refused to work reliably.</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="num now">4</div>
+    <div>
+      <h3>Make it a real app <span class="tag now">YOU ARE HERE</span></h3>
+      <div class="what">Its own name, its own icon, a proper installer, a welcome screen for
+      someone opening it for the first time, and the typeface your design actually specified.</div>
+      <div class="proof">Installer and icon: done, you verified all 9 checks. Welcome screen and
+      typeface: built, you found 2 problems, fix is with Codex right now.</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="num todo">5</div>
+    <div>
+      <h3>Make it hard to break <span class="tag todo">LAST ONE</span></h3>
+      <div class="what">Deliberately breaking it in every way a real day would — yanking the
+      microphone out mid-sentence, killing the network, feeding it a dead API key — and making sure
+      each one explains itself instead of failing silently. Plus the frosted-glass effect on the bar
+      and a speed check against the targets set at the start.</div>
+      <div class="proof">Not started. Written up below.</div>
+    </div>
+  </div>
+
+  <h2>What "100% complete" actually means</h2>
+
+  <div class="grid">
+    <div class="card">
+      <h3>One work session</h3>
+      <p>Stage 4 finishes as soon as you re-test the fix that's building now. That's the same
+      loop you've done eight times: Codex builds, you check, I fix what you find.</p>
+    </div>
+    <div class="card">
+      <h3>Then stage 5</h3>
+      <p>Bigger than a fix round, smaller than the settings window. Likely two or three
+      build-and-test cycles, because breaking things on purpose always turns up something.</p>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>Why I won't give you a date.</strong> Every estimate I could give you would be a guess
+    about how many defects your testing finds — and your testing has found something in five of the
+    eight rounds so far. That's the process working, not failing. The honest answer is
+    <strong>two to four more rounds of the same loop</strong>, and you control the pace.
+  </div>
+
+  <h2>Everything still on the list</h2>
+
+  <ul class="list">
+    <li><strong>Finish the welcome screen fix</strong>
+      Entering your key should hand you to the settings window rather than leaving you staring at
+      nothing, and settings should re-read its values each time it opens instead of once at startup.
+      <em>With Codex now.</em></li>
+
+    <li><strong>Handle every way it can fail</strong>
+      A rejected API key should open settings at the key box, not just flash red. Losing your network
+      should retry once before giving up. Pulling the microphone out mid-sentence should keep what it
+      already heard rather than throwing it away.</li>
+
+    <li><strong>Tell you when a microphone won't open</strong>
+      Found in your own logs during stage 3: you picked a device Windows refused to open, and the
+      settings window said nothing at all. Dictation just silently did nothing.</li>
+
+    <li><strong>The frosted-glass bar</strong>
+      Deferred twice already. The floating bar is currently flat; the design has it translucent with
+      the desktop blurred behind it.</li>
+
+    <li><strong>Prove it's as fast as promised</strong>
+      Targets set before any code was written: ready to use within 1.5 seconds of launching, and bars
+      moving within 100 milliseconds of you pressing the keys. Never measured.</li>
+
+    <li><strong>Keep more than plain text on your clipboard</strong>
+      Right now, if you had an image or formatted text copied, it comes back as nothing after a
+      dictation. Plain text survives; everything else doesn't.</li>
+  </ul>
+
+  <h2>How the app is put together</h2>
+
+  <p style="color:var(--muted)">Nine things happen between your thumb hitting the keys and the words
+  appearing. Every one of them is built and working today.</p>
+
+  <div class="flow">
+    <div class="box"><b>Keys held</b>Watched at the Windows level, so it works in any app</div>
+    <div class="arrow">→</div>
+    <div class="box"><b>Bar appears</b>Already recording — the half-second before you pressed is kept, so no clipped first word</div>
+    <div class="arrow">→</div>
+    <div class="box"><b>Keys released</b>Audio shrunk locally before sending — a third the size</div>
+  </div>
+  <div class="flow" style="margin-top:10px">
+    <div class="box"><b>Sent to Groq</b>Transcribed, then optionally rewritten to your tone</div>
+    <div class="arrow">→</div>
+    <div class="box"><b>Clipboard staged</b>Flagged so Windows won't sync or remember it</div>
+    <div class="arrow">→</div>
+    <div class="box"><b>Pasted &amp; restored</b>Waits for proof the paste landed, then puts your clipboard back</div>
+  </div>
+
+  <div class="note" style="margin-top:22px">
+    <strong>The one that mattered most.</strong> The old version guessed — it waited 550 milliseconds
+    and hoped the paste had happened before restoring your clipboard. This one waits for Windows to
+    confirm the paste actually occurred. That's the difference between "usually works" and "works".
+  </div>
+
+  <h2>By the numbers</h2>
+
+  <table>
+    <tr><th>Thing</th><th>Now</th><th>Old Python version</th></tr>
+    <tr><td>Code you'd have to maintain</td><td class="n">2,993 lines</td><td class="n">7,935 lines</td></tr>
+    <tr><td>Download size</td><td class="n">2.6 MB</td><td class="n">~200 MB</td></tr>
+    <tr><td>Installed size</td><td class="n">11 MB</td><td class="n">~500 MB</td></tr>
+    <tr><td>Automated tests</td><td class="n">42 passing</td><td class="n">none</td></tr>
+    <tr><td>Compiler complaints</td><td class="n">zero</td><td class="n">n/a</td></tr>
+    <tr><td>Features</td><td class="n">1, done properly</td><td class="n">6, half-working</td></tr>
+  </table>
+
+  <div class="note">
+    <strong>Why so much smaller.</strong> Your app doesn't carry a web browser around with it —
+    it borrows the one Windows already has. The old version shipped an entire Python runtime and
+    interface toolkit inside itself. Same job, a fiftieth of the disk.
+  </div>
+
+</div>
+</body>
+</html>
