@@ -1,5 +1,6 @@
 mod applog;
 mod audio;
+mod autostart;
 mod clipboard;
 #[allow(dead_code)]
 mod config;

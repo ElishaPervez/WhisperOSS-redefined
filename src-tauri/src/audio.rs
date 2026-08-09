@@ -14,6 +14,27 @@ use tauri::Emitter;
 
 use crate::{applog, dsp};
 
+/// Names of all available input devices, for the settings picker (M3b).
+#[allow(dead_code)]
+pub fn list_input_devices() -> Vec<String> {
+    let host = cpal::default_host();
+    let Ok(devices) = host.input_devices() else { return Vec::new() };
+    devices.filter_map(|d| d.name().ok()).collect()
+}
+
+fn pick_device(preferred: &Option<String>) -> Option<cpal::Device> {
+    let host = cpal::default_host();
+    if let Some(name) = preferred {
+        if let Ok(mut devices) = host.input_devices() {
+            if let Some(d) = devices.find(|d| d.name().ok().as_deref() == Some(name)) {
+                return Some(d);
+            }
+        }
+        crate::applog::log("audio-preferred-device-missing-using-default");
+    }
+    host.default_input_device()
+}
+
 const PRE_ROLL_SECS: f64 = 0.5;
 
 pub struct AudioEngine {
@@ -25,7 +46,7 @@ pub struct AudioEngine {
 }
 
 impl AudioEngine {
-    pub fn start(app: tauri::AppHandle) -> Arc<AudioEngine> {
+    pub fn start(app: tauri::AppHandle, preferred: Option<String>) -> Arc<AudioEngine> {
         let engine = Arc::new(AudioEngine {
             ring: Mutex::new(VecDeque::new()),
             recording: Mutex::new(None),
@@ -38,7 +59,7 @@ impl AudioEngine {
         // park that thread forever to keep the stream alive.
         let e = engine.clone();
         std::thread::spawn(move || {
-            match build_stream(&e) {
+            match build_stream(&e, &preferred) {
                 Ok(stream) => {
                     if stream.play().is_ok() {
                         e.healthy.store(true, Ordering::SeqCst);
@@ -100,9 +121,13 @@ impl AudioEngine {
     }
 }
 
-fn build_stream(engine: &Arc<AudioEngine>) -> Result<cpal::Stream, String> {
+fn build_stream(
+    engine: &Arc<AudioEngine>,
+    preferred: &Option<String>,
+) -> Result<cpal::Stream, String> {
     let host = cpal::default_host();
-    let device = host.default_input_device().ok_or("no input device")?;
+    let device = pick_device(preferred).ok_or("no input device")?;
+    let _ = host; // host only needed by pick_device/list; drop if warned
     let config = device.default_input_config().map_err(|e| e.to_string())?;
     let rate = config.sample_rate().0;
     let channels = config.channels() as usize;
