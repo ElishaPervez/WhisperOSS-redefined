@@ -171,6 +171,40 @@ impl AudioEngine {
     }
 }
 
+/// What the two-second tick should do about getting back to the device the
+/// user actually picked. Pure so it can be tested.
+#[derive(Debug, PartialEq)]
+enum Reclaim {
+    /// Nothing to do — no picked device, on the right one already, mid-take,
+    /// or the device is listed but refused to open last time.
+    Stay,
+    /// The picked device vanished from Windows again: forget a remembered
+    /// refusal so its next appearance gets a fresh attempt.
+    ForgetRefusal,
+    /// The picked device is back in Windows — move to it.
+    Attempt,
+}
+
+fn reclaim_step(
+    wanted: Option<&str>,
+    active: Option<&str>,
+    recording: bool,
+    listed: bool,
+    refused: Option<&str>,
+) -> Reclaim {
+    let Some(name) = wanted else { return Reclaim::Stay };
+    if active == Some(name) {
+        return Reclaim::Stay;
+    }
+    if !listed {
+        return Reclaim::ForgetRefusal;
+    }
+    if recording || refused == Some(name) {
+        return Reclaim::Stay;
+    }
+    Reclaim::Attempt
+}
+
 /// Try the user's chosen device, then the Windows default if it refuses.
 /// `pick_device` already handles a device whose *name* has vanished; this
 /// handles one that is still listed but will not open — held by another app,
@@ -316,4 +350,30 @@ fn build_stream(
         other => return Err(format!("unsupported sample format {other:?}")),
     };
     Ok(stream)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{reclaim_step, Reclaim};
+
+    #[test]
+    fn reclaim_decision() {
+        use Reclaim::*;
+        let usb = Some("USB PnP Audio Device");
+        let nvidia = Some("NVIDIA Broadcast");
+        // user picked "system default": there is nothing to go back to
+        assert_eq!(reclaim_step(None, nvidia, false, false, None), Stay);
+        // already on the picked device
+        assert_eq!(reclaim_step(usb, usb, false, true, None), Stay);
+        // picked device still absent from Windows: wait, and forget any refusal
+        assert_eq!(reclaim_step(usb, nvidia, false, false, None), ForgetRefusal);
+        assert_eq!(reclaim_step(usb, nvidia, false, false, usb), ForgetRefusal);
+        // picked device is back: move to it
+        assert_eq!(reclaim_step(usb, nvidia, false, true, None), Attempt);
+        assert_eq!(reclaim_step(usb, None, false, true, None), Attempt);
+        // back, but a recording is running: not in the middle of a take
+        assert_eq!(reclaim_step(usb, nvidia, true, true, None), Stay);
+        // listed but it refused to open last time: do not churn every two seconds
+        assert_eq!(reclaim_step(usb, nvidia, false, true, usb), Stay);
+    }
 }
