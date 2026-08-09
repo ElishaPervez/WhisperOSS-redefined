@@ -84,9 +84,16 @@
   .seg button + button { border-left: 1px solid var(--divider); }
   .seg button.active { background: var(--text); color: var(--bg); font-weight: 700; }
 
-  .mic-static {
-    width: 232px; border: 1px solid var(--divider); padding: 9px 12px;
-    font-size: 13px; color: var(--muted);
+  .combo-keys { display: flex; align-items: center; gap: 11px; }
+  .hint { font-size: 12px; color: var(--muted); margin-left: 12px; }
+  .hint.ok { color: #3fb970; }
+  .hint.err { color: var(--accent); }
+  body.capturing .key { border-color: var(--accent); }
+
+  .mic {
+    width: 232px; font-size: 13px; padding: 9px 12px; background: var(--surface);
+    color: var(--text); border: 1px solid var(--divider);
+    font-family: var(--font-body);
   }
 
   .statusbar {
@@ -119,12 +126,11 @@
     <div class="kicker">GLOBAL HOTKEY</div>
     <div class="combo">
       <span>Hold</span>
-      <span class="key" id="key1">Ctrl</span>
-      <span class="plus">+</span>
-      <span class="key" id="key2">Win</span>
+      <span class="combo-keys" id="combo-keys"></span>
       <span>— speak — release</span>
     </div>
-    <button class="btn change" id="change-hotkey" disabled title="Rebind arrives in the next update">Change hotkey</button>
+    <button class="btn change" id="change-hotkey">Change hotkey</button>
+    <span class="hint" id="hotkey-hint"></span>
   </div>
   <div class="divider"></div>
 
@@ -162,9 +168,9 @@
     <div class="row">
       <div>
         <div class="label">Microphone</div>
-        <div class="desc">Input device used while dictating · picker in next update</div>
+        <div class="desc">Input device used while dictating</div>
       </div>
-      <div class="mic-static" id="mic-name">System default</div>
+      <select class="mic" id="mic"></select>
     </div>
 
     <div class="row">
