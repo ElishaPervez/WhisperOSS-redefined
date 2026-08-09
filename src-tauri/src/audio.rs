@@ -1,11 +1,12 @@
 //! Always-on microphone capture (spec §4). The stream never stops: it feeds
 //! a 0.5 s pre-roll ring so recording start is instant and the first word
 //! is never clipped. Mono i16 at the device's native rate; downsampling to
-//! 16 kHz happens at upload time (dsp.rs). Default input device only in M1
-//! (device picker is M3).
+//! 16 kHz happens at upload time (dsp.rs). The device is swappable at runtime
+//! (M3c) — see switch_device.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, Ordering};
+use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -15,7 +16,6 @@ use tauri::Emitter;
 use crate::{applog, dsp};
 
 /// Names of all available input devices, for the settings picker (M3b).
-#[allow(dead_code)]
 pub fn list_input_devices() -> Vec<String> {
     let host = cpal::default_host();
     let Ok(devices) = host.input_devices() else { return Vec::new() };
@@ -43,35 +43,32 @@ pub struct AudioEngine {
     rate: AtomicU32,
     peak: AtomicU16,
     healthy: AtomicBool,
+    /// Carries the next device name to the stream thread. The stream object
+    /// itself can only exist on that thread.
+    device_tx: Mutex<Sender<Option<String>>>,
 }
 
 impl AudioEngine {
     pub fn start(app: tauri::AppHandle, preferred: Option<String>) -> Arc<AudioEngine> {
+        let (device_tx, device_rx) = channel::<Option<String>>();
         let engine = Arc::new(AudioEngine {
             ring: Mutex::new(VecDeque::new()),
             recording: Mutex::new(None),
             rate: AtomicU32::new(16_000),
             peak: AtomicU16::new(0),
             healthy: AtomicBool::new(false),
+            device_tx: Mutex::new(device_tx),
         });
 
-        // The cpal stream is not Send: build it on a dedicated thread and
-        // park that thread forever to keep the stream alive.
+        // The cpal stream is not Send: build it, hold it, and drop it all on
+        // this one thread. It blocks here until a device change arrives.
         let e = engine.clone();
         std::thread::spawn(move || {
-            match build_stream(&e, &preferred) {
-                Ok(stream) => {
-                    if stream.play().is_ok() {
-                        e.healthy.store(true, Ordering::SeqCst);
-                        applog::log("audio-stream-started");
-                    } else {
-                        applog::log("audio-stream-play-failed");
-                    }
-                    loop {
-                        std::thread::park();
-                    }
-                }
-                Err(msg) => applog::log(&format!("audio-stream-error {msg}")),
+            let mut stream = open(&e, &preferred);
+            for next in device_rx {
+                drop(stream.take());
+                e.reset_buffers();
+                stream = open(&e, &next);
             }
         });
 
@@ -90,6 +87,19 @@ impl AudioEngine {
 
     pub fn is_healthy(&self) -> bool {
         self.healthy.load(Ordering::SeqCst)
+    }
+
+    /// Change the capture device without restarting the app. The pre-roll
+    /// buffer is thrown away because the new device may run at a different
+    /// sample rate, and splicing the two would garble the first half-second.
+    pub fn switch_device(&self, preferred: Option<String>) {
+        applog::log("audio-switch-device-requested");
+        let _ = self.device_tx.lock().unwrap().send(preferred);
+    }
+
+    fn reset_buffers(&self) {
+        self.ring.lock().unwrap().clear();
+        *self.recording.lock().unwrap() = None;
     }
 
     /// Instant start: seed the take with the pre-roll ring contents.
@@ -118,6 +128,28 @@ impl AudioEngine {
         }
         let peak = mono.iter().map(|s| s.unsigned_abs()).max().unwrap_or(0);
         self.peak.fetch_max(peak, Ordering::SeqCst);
+    }
+}
+
+/// Build and start a stream, keeping the healthy flag honest. A dictation
+/// attempted while this is None gets the "No mic detected" pill.
+fn open(engine: &Arc<AudioEngine>, preferred: &Option<String>) -> Option<cpal::Stream> {
+    engine.healthy.store(false, Ordering::SeqCst);
+    match build_stream(engine, preferred) {
+        Ok(stream) => {
+            if stream.play().is_ok() {
+                engine.healthy.store(true, Ordering::SeqCst);
+                applog::log("audio-stream-started");
+                Some(stream)
+            } else {
+                applog::log("audio-stream-play-failed");
+                None
+            }
+        }
+        Err(msg) => {
+            applog::log(&format!("audio-stream-error {msg}"));
+            None
+        }
     }
 }
 

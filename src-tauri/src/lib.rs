@@ -29,6 +29,10 @@ pub fn run() {
             commands::set_theme,
             commands::set_autostart,
             commands::save_api_key,
+            commands::list_microphones,
+            commands::set_microphone,
+            commands::begin_hotkey_capture,
+            commands::cancel_hotkey_capture,
         ])
         .setup(|app| {
             applog::log("app-start");
