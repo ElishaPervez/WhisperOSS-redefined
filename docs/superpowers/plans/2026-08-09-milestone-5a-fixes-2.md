@@ -83,6 +83,74 @@ git commit -m "feat: the audio engine announces microphone changes"
 
 ---
 
+### Task 1b: The startup open stays silent
+
+**Status note (2026-08-09):** Task 1 (`aa722bb`) verification of Task 2 found a
+startup race. The engine's very first `open` runs during app setup, before the
+application has finished registering its managed state. Its announcement
+reached the already-loaded settings page, which called `get_settings` and was
+rejected — one red console error at every launch.
+
+The first open at boot is **not a transition** — nothing was lost, recovered,
+or switched, and the settings window re-reads everything on `settings-shown`
+anyway. So the initial open must not announce. Every later `open` call (device
+switches) and every other announcement site (recovery, error callback) runs
+long after startup, when the app is fully ready.
+
+**Files:**
+- Modify: `src-tauri/src/audio.rs`
+
+- [ ] **Step 1: Give `open` an announce flag.** Change its signature to:
+
+```rust
+fn open(
+    engine: &Arc<AudioEngine>,
+    preferred: &Option<String>,
+    announce: bool,
+) -> Option<cpal::Stream> {
+```
+
+and wrap each of the three `engine.announce_change();` calls inside it as:
+
+```rust
+                if announce {
+                    engine.announce_change();
+                }
+```
+
+(matching each site's existing indentation).
+
+- [ ] **Step 2: Update the two call sites** in the stream thread inside
+`AudioEngine::start`:
+
+The initial open, before the loop — this is startup, stay silent:
+
+```rust
+            let mut stream = open(&e, &wanted, false);
+```
+
+The device-switch open, in the `Ok(next)` branch — a real transition, announce:
+
+```rust
+                        stream = open(&e, &wanted, true);
+```
+
+`reopen_quietly`, the error callback, and everything else stay exactly as
+Task 1 left them.
+
+- [ ] **Step 3: Verify**
+
+Run: `cargo test` → **43 passed**. `cargo check` → zero warnings.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src-tauri/src/audio.rs
+git commit -m "fix: the startup stream open does not announce before the app is ready"
+```
+
+---
+
 ### Task 2: The settings window listens
 
 **Files:**
