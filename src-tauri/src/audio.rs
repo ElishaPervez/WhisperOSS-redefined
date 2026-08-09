@@ -159,11 +159,33 @@ impl AudioEngine {
     }
 }
 
+/// Try the user's chosen device, then the Windows default if it refuses.
+/// `pick_device` already handles a device whose *name* has vanished; this
+/// handles one that is still listed but will not open — held by another app,
+/// or offering a format we cannot use. Without this the retry loop would
+/// reopen the same broken device every two seconds forever.
+fn build_with_fallback(
+    engine: &Arc<AudioEngine>,
+    preferred: &Option<String>,
+    log_failure: bool,
+) -> Result<cpal::Stream, String> {
+    match build_stream(engine, preferred) {
+        Ok(s) => Ok(s),
+        Err(first) if preferred.is_some() => {
+            if log_failure {
+                applog::log(&format!("audio-preferred-device-refused {first}"));
+            }
+            build_stream(engine, &None)
+        }
+        Err(e) => Err(e),
+    }
+}
+
 /// Build and start a stream, keeping the healthy flag honest. A dictation
 /// attempted while this is None gets the "No mic detected" pill.
 fn open(engine: &Arc<AudioEngine>, preferred: &Option<String>) -> Option<cpal::Stream> {
     engine.healthy.store(false, Ordering::SeqCst);
-    match build_stream(engine, preferred) {
+    match build_with_fallback(engine, preferred, true) {
         Ok(stream) => {
             if stream.play().is_ok() {
                 engine.healthy.store(true, Ordering::SeqCst);
@@ -189,7 +211,7 @@ fn open(engine: &Arc<AudioEngine>, preferred: &Option<String>) -> Option<cpal::S
 /// exactly one line when a device finally appears.
 fn reopen_quietly(engine: &Arc<AudioEngine>, preferred: &Option<String>) -> Option<cpal::Stream> {
     engine.healthy.store(false, Ordering::SeqCst);
-    let stream = match build_stream(engine, preferred) {
+    let stream = match build_with_fallback(engine, preferred, false) {
         Ok(s) => s,
         Err(_) => {
             *engine.active_device.lock().unwrap() = None;
