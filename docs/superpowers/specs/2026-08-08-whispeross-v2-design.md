@@ -28,7 +28,7 @@ speed (startup and every interaction).
   is no rebind UI — the capture-based rebind was built in Milestone 3c and removed
   after it proved unreliable (it was cancelled by the settings window's own focus
   handling before any key could be recorded).
-- Settings window with exactly six controls (see §4).
+- Settings window with exactly seven controls (see §4).
 - First-run flow: welcome → API key entry with live validation.
 - System tray (Show settings / Quit); closing the window hides to tray.
 - Start with Windows (per-user registry Run key), toggleable.
@@ -65,15 +65,16 @@ uppercase micro-labels. Both themes are specified for every surface.
 
 ### Surfaces
 
-**Settings window — 960×640, frameless, acrylic, the only real window.**
+**Settings window — 960×700, frameless, acrylic, the only real window.**
 Header (brand + minimize/close) · display-only hotkey hero ("Hold Ctrl + Win —
-speak — release") · then exactly six controls:
+speak — release") · then exactly seven controls:
 1. Groq API key (masked field, show/hide, Save)
 2. AI formatting (toggle)
 3. Casual mode (toggle)
 4. Microphone (dropdown + refresh)
 5. Theme (Auto / Light / Dark segmented control)
 6. Start with Windows (toggle)
+7. Custom vocabulary (tag-chip editor)
 Footer status line: "Groq connected · Microphone OK" + version.
 
 **Overlay pill — resting size 120×36, always on top, click-through, never takes focus.**
@@ -113,7 +114,8 @@ dictation in flight.
   refresh must not interrupt the live stream. If the chosen mic disappears,
   fall back to the Windows default device.
 - **Groq client** — `reqwest` against Groq's REST API (no SDK).
-  Transcription request: 15 s timeout, one automatic retry, cancellable.
+  Transcription request: 15 s timeout, one automatic retry, cancellable. When
+  custom vocabulary is non-empty, it is sent as the transcription `prompt`.
   Starting a new dictation cancels any in-flight request. Optional second
   request for formatting/casual cleanup (same timeout rules).
 - **Paste** — Win32 clipboard via `windows-rs`: snapshot every restorable
@@ -130,7 +132,8 @@ dictation in flight.
 - **Config** — JSON at `%APPDATA%\WhisperOSS\config.json`. Keys: hotkey
   (modifier + key names), `use_formatter`, `casual_mode`, `input_device`
   (stored by device *name*, not index — indexes shift between sessions),
-  `theme`, `run_on_startup`. Unknown/missing keys merge onto defaults.
+  `theme`, `run_on_startup`, `vocabulary` (list of words, default empty).
+  Unknown/missing keys merge onto defaults.
 - **Secrets** — `keyring` crate → Windows Credential Manager, service
   "WhisperOSS". The API key never appears in `config.json`.
 - **Autostart** — `HKCU\…\Run` value "WhisperOSS" (or `tauri-plugin-autostart`

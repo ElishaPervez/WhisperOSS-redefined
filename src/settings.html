@@ -93,6 +93,28 @@
   }
   .micnote { font-size: 12px; color: var(--accent); margin-left: 4px; }
 
+  .chips {
+    display: flex; flex-wrap: wrap; gap: 8px; max-width: 460px;
+    justify-content: flex-end; align-items: center;
+  }
+  .chip {
+    display: flex; align-items: center;
+    border: 1px solid var(--divider); background: var(--surface);
+    padding: 4px 10px; font-size: 13px;
+  }
+  .chip-remove {
+    border: none; background: none; color: var(--muted); cursor: pointer;
+    padding: 0; margin-left: 8px; font: inherit; line-height: 1;
+  }
+  .chip-remove:hover { color: var(--accent); }
+  #vocab-input {
+    width: 120px; min-width: 120px; flex: 1 1 120px; padding: 4px 0;
+    background: transparent; border: none; color: var(--text);
+    font-family: var(--font-body); font-size: 13px;
+  }
+  #vocab-input:focus { outline: none; }
+  #vocab-input::placeholder { color: var(--muted); opacity: 0.7; }
+
   .statusbar {
     height: 46px; flex: none;
     border-top: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
@@ -187,6 +209,16 @@
         <div class="desc">Runs quietly in the tray</div>
       </div>
       <div class="toggle" id="autostart" role="switch"><div class="knob"></div></div>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label">Custom vocabulary</div>
+        <div class="desc">Names and jargon Whisper should spell correctly <span class="micnote" id="vocab-note"></span></div>
+      </div>
+      <div class="chips" id="vocab">
+        <input type="text" id="vocab-input" placeholder="add a word..." />
+      </div>
     </div>
   </div>
 

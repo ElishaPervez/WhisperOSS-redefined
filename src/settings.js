@@ -7,6 +7,7 @@ document.getElementById("min").onclick = () => win.minimize();
 document.getElementById("close").onclick = () => win.hide();
 
 const el = (id) => document.getElementById(id);
+let vocabularyWords = [];
 
 function paintToggle(node, on) {
   node.classList.toggle("on", on);
@@ -41,6 +42,55 @@ function renderCombo(names) {
     k.textContent = keyLabel(n);
     box.appendChild(k);
   });
+}
+
+function renderVocabulary() {
+  const box = el("vocab");
+  const input = el("vocab-input");
+  box.replaceChildren();
+
+  vocabularyWords.forEach((word, index) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+
+    const label = document.createElement("span");
+    label.textContent = word;
+    chip.appendChild(label);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "chip-remove";
+    remove.textContent = "x";
+    remove.setAttribute("aria-label", `Remove ${word}`);
+    remove.onclick = async () => {
+      vocabularyWords.splice(index, 1);
+      await persistVocabulary();
+    };
+    chip.appendChild(remove);
+    box.appendChild(chip);
+  });
+
+  box.appendChild(input);
+  el("vocab-note").textContent = vocabularyWords.length > 50
+    ? "Whisper reads only about the last 150 words"
+    : "";
+}
+
+async function persistVocabulary() {
+  renderVocabulary();
+  await invoke("set_vocabulary", { value: vocabularyWords });
+  el("status-text").textContent = "Vocabulary updated";
+}
+
+async function commitVocabulary() {
+  const input = el("vocab-input");
+  const word = input.value.trim();
+  input.value = "";
+  if (!word) return;
+  if (vocabularyWords.some((existing) => existing.toLowerCase() === word.toLowerCase())) return;
+
+  vocabularyWords.push(word);
+  await persistVocabulary();
 }
 
 async function loadMics(selected) {
@@ -88,6 +138,8 @@ async function load() {
   paintToggle(el("casual"), cfg.casual_mode);
   paintToggle(el("autostart"), cfg.run_on_startup);
   applyTheme(cfg.theme);
+  vocabularyWords = [...cfg.vocabulary];
+  renderVocabulary();
 
   renderCombo(cfg.hotkey);
   await refreshMic();
@@ -120,6 +172,13 @@ function wireToggle(id, command) {
 wireToggle("formatter", "set_formatter");
 wireToggle("casual", "set_casual");
 wireToggle("autostart", "set_autostart");
+
+// --- custom vocabulary ---
+el("vocab-input").onkeydown = async (event) => {
+  if (event.key !== "Enter" && event.key !== ",") return;
+  event.preventDefault();
+  await commitVocabulary();
+};
 
 // --- theme ---
 for (const b of el("theme").children) {

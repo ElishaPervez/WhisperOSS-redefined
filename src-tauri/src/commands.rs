@@ -51,6 +51,32 @@ pub fn set_theme(state: State<AppState>, value: String) {
     applog::log("setting-theme-changed");
 }
 
+fn sanitize_vocabulary(value: Vec<String>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut sanitized = Vec::new();
+
+    for entry in value {
+        let entry = entry.trim();
+        if entry.is_empty() {
+            continue;
+        }
+
+        let comparison_key = entry.to_lowercase();
+        if seen.insert(comparison_key) {
+            sanitized.push(entry.to_string());
+        }
+    }
+
+    sanitized
+}
+
+#[tauri::command]
+pub fn set_vocabulary(state: State<AppState>, value: Vec<String>) {
+    state.config.lock().unwrap().vocabulary = sanitize_vocabulary(value);
+    persist(&state);
+    applog::log("setting-vocabulary-changed");
+}
+
 #[tauri::command]
 pub fn set_autostart(state: State<AppState>, value: bool) {
     state.config.lock().unwrap().run_on_startup = value;
@@ -141,6 +167,18 @@ mod tests {
         assert_eq!(normalize_theme("AUTO"), "auto");
         assert_eq!(normalize_theme("nonsense"), "auto");
         assert_eq!(normalize_theme(""), "auto");
+    }
+
+    #[test]
+    fn vocabulary_is_trimmed_and_deduplicated_case_insensitively() {
+        let value = vec![
+            "Claude".to_string(),
+            "claude ".to_string(),
+            "".to_string(),
+            "OpenAI".to_string(),
+        ];
+
+        assert_eq!(sanitize_vocabulary(value), vec!["Claude", "OpenAI"]);
     }
 }
 

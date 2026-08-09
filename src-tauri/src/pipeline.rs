@@ -152,16 +152,21 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                     );
                     let state = state.clone();
                     std::thread::spawn(move || {
-                        let (key, use_formatter, casual) = {
+                        let (key, use_formatter, casual, vocab) = {
                             let cfg = state.config.lock().unwrap();
-                            (state.key.lock().unwrap().clone(), cfg.use_formatter, cfg.casual_mode)
+                            (
+                                state.key.lock().unwrap().clone(),
+                                cfg.use_formatter,
+                                cfg.casual_mode,
+                                cfg.vocabulary.join(", "),
+                            )
                         };
                         let client = groq::GroqClient::new(
                             key,
                             groq::PROD_BASE_URL.to_string(),
                             REQUEST_TIMEOUT,
                         );
-                        match client.transcribe(wav) {
+                        match client.transcribe(wav, &vocab) {
                             Ok(_) if !ui.current(my_gen) => {
                                 applog::log("result-discarded-stale");
                                 // No UI touches: a newer dictation owns the pill.

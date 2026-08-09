@@ -28,6 +28,7 @@ pub fn run() {
             commands::set_formatter,
             commands::set_casual,
             commands::set_theme,
+            commands::set_vocabulary,
             commands::set_autostart,
             commands::save_api_key,
             commands::list_microphones,

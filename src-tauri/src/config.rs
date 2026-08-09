@@ -20,6 +20,10 @@ pub struct Config {
     /// "auto" | "light" | "dark" (consumed by the settings window in M3b).
     pub theme: String,
     pub run_on_startup: bool,
+    /// Custom vocabulary sent as the Whisper `prompt` field (spec: custom
+    /// vocabulary, 2026-08-09). Empty = feature off, field omitted from the
+    /// request.
+    pub vocabulary: Vec<String>,
 }
 
 impl Default for Config {
@@ -31,6 +35,7 @@ impl Default for Config {
             input_device: None,
             theme: "auto".into(),
             run_on_startup: true,
+            vocabulary: Vec::new(),
         }
     }
 }
@@ -76,6 +81,7 @@ mod tests {
         assert_eq!(c.input_device, None);
         assert_eq!(c.theme, "auto");
         assert!(c.run_on_startup);
+        assert!(c.vocabulary.is_empty());
     }
 
     #[test]
@@ -84,6 +90,7 @@ mod tests {
         assert!(c.use_formatter);
         assert_eq!(c.hotkey, vec!["ctrl".to_string(), "win".to_string()]);
         assert_eq!(c.theme, "auto");
+        assert!(c.vocabulary.is_empty());
     }
 
     #[test]
@@ -97,6 +104,7 @@ mod tests {
         let mut c = Config::default();
         c.casual_mode = true;
         c.input_device = Some("Yeti Nano (WASAPI)".into());
+        c.vocabulary = vec!["Codex".into(), "Claude Code".into()];
         assert_eq!(from_json(&to_json(&c)), c);
     }
 }
