@@ -53,7 +53,8 @@ pub fn run() {
             app.manage(app_state.clone());
 
             if key.is_empty() {
-                applog::log("pipeline-started-without-key");
+                applog::log("first-run-no-key");
+                show_first_run(app.handle());
             }
             pipeline::start(app.handle().clone(), app_state);
 
@@ -103,6 +104,13 @@ pub fn run() {
 
 pub(crate) fn show_settings(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+pub(crate) fn show_first_run(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("firstrun") {
         let _ = w.show();
         let _ = w.set_focus();
     }

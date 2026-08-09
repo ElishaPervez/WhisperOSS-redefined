@@ -98,6 +98,11 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
             match tracker.on_event(ev) {
                 hotkey_logic::Action::None => {}
                 hotkey_logic::Action::Start => {
+                    if state.key.lock().unwrap().is_empty() {
+                        applog::log("recording-refused-no-key");
+                        crate::show_first_run(&app);
+                        continue;
+                    }
                     let my_gen = generation.fetch_add(1, Ordering::SeqCst) + 1;
                     let ui = Ui { app: app.clone(), generation: generation.clone() };
                     if !audio.is_healthy() {
