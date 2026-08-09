@@ -2,12 +2,9 @@
 //! persists to config.json, and (where relevant) applies immediately. The
 //! window never touches config.json directly — it goes through these.
 
-use std::sync::atomic::Ordering;
-use std::time::Duration;
+use tauri::State;
 
-use tauri::{Emitter, Manager, State};
-
-use crate::{applog, audio, autostart, config, groq, hook, hotkey_logic, keys, state::AppState};
+use crate::{applog, audio, autostart, config, groq, keys, state::AppState};
 
 /// Only three themes are valid; anything else falls back to "auto".
 pub fn normalize_theme(value: &str) -> String {
@@ -101,73 +98,6 @@ pub fn set_microphone(state: State<AppState>, value: Option<String>) {
     persist(&state);
     state.audio.switch_device(value);
     applog::log("setting-microphone-changed");
-}
-
-/// Start listening for a new combo. Everything typed anywhere on the machine
-/// is swallowed until this ends, so it always ends: on the first key release,
-/// on Escape, when the window loses focus, or on the watchdog below.
-#[tauri::command]
-pub fn begin_hotkey_capture(app: tauri::AppHandle, state: State<AppState>) {
-    // A dictation must not survive into capture mode.
-    state.generation.fetch_add(1, Ordering::SeqCst);
-    let _ = state.audio.stop_recording();
-    if let Some(w) = app.get_webview_window("overlay") {
-        let _ = w.hide();
-    }
-
-    let my_gen = state.capture_gen.load(Ordering::SeqCst);
-    state.capturing.store(true, Ordering::SeqCst);
-    hook::set_capture(true);
-    hook::set_diag(true);
-    applog::log(&format!(
-        "hotkey-capture-begin hook_flag={}",
-        hook::is_capturing()
-    ));
-
-    let capturing = state.capturing.clone();
-    let capture_gen = state.capture_gen.clone();
-    let app = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(hotkey_logic::CAPTURE_TIMEOUT_MS));
-        if capture_gen.load(Ordering::SeqCst) == my_gen
-            && capturing.swap(false, Ordering::SeqCst)
-        {
-            hook::set_diag(false);
-            hook::set_capture(false);
-            capture_gen.fetch_add(1, Ordering::SeqCst);
-            applog::log("hotkey-capture-timeout");
-            let _ = app.emit(
-                "hotkey",
-                serde_json::json!({ "phase": "cancelled", "keys": [] }),
-            );
-        }
-    });
-}
-
-#[tauri::command]
-pub fn cancel_hotkey_capture(app: tauri::AppHandle, state: State<AppState>, reason: String) {
-    if state.capturing.swap(false, Ordering::SeqCst) {
-        hook::set_capture(false);
-        hook::set_diag(false);
-        state.capture_gen.fetch_add(1, Ordering::SeqCst);
-        applog::log(&format!("hotkey-capture-cancelled reason={reason}"));
-        let _ = app.emit(
-            "hotkey",
-            serde_json::json!({ "phase": "cancelled", "keys": [] }),
-        );
-    } else {
-        applog::log(&format!("hotkey-capture-cancel-ignored reason={reason}"));
-    }
-}
-
-/// Diagnostic: records that the settings window lost focus during a rebind,
-/// without ending it. Round 1 showed blur was cancelling every attempt.
-#[tauri::command]
-pub fn report_blur(state: State<AppState>) {
-    applog::log(&format!(
-        "settings-window-blurred capturing={}",
-        state.capturing.load(Ordering::SeqCst)
-    ));
 }
 
 #[cfg(test)]

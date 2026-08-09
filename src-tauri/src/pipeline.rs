@@ -82,21 +82,6 @@ fn apply_combo(combo: &[hotkey_logic::Key]) {
     );
 }
 
-/// Tell the settings window what the rebind is doing. `keys` that have no
-/// config name (an F-key mid-press) come through as an empty preview; the
-/// release then reports them as invalid.
-fn emit_hotkey(app: &tauri::AppHandle, phase: &str, keys: &[hotkey_logic::Key]) {
-    let names = hotkey_logic::combo_names(keys).unwrap_or_default();
-    let _ = app.emit("hotkey", serde_json::json!({ "phase": phase, "keys": names }));
-}
-
-fn end_capture(state: &crate::state::AppState) {
-    state.capturing.store(false, Ordering::SeqCst);
-    state.capture_gen.fetch_add(1, Ordering::SeqCst);
-    hook::set_capture(false);
-    hook::set_diag(false);
-}
-
 pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
     let (tx, rx) = channel();
     hook::spawn(tx);
@@ -108,64 +93,8 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
 
     std::thread::spawn(move || {
         let mut tracker = hotkey_logic::HoldTracker::new(combo);
-        let mut capture = hotkey_logic::CaptureBuffer::new();
-        let mut was_capturing = false;
 
         for ev in rx {
-            let capturing_now = state.capturing.load(Ordering::SeqCst);
-            if capturing_now != was_capturing {
-                applog::log(&format!("pipeline-capture-flag={capturing_now}"));
-            }
-            if state.capturing.load(Ordering::SeqCst) {
-                if !was_capturing {
-                    capture = hotkey_logic::CaptureBuffer::new();
-                    was_capturing = true;
-                }
-                applog::log("pipeline-capture-event");
-                match capture.on_event(ev) {
-                    hotkey_logic::Capture::Pending(keys) => {
-                        applog::log(&format!("hotkey-capture-pending n={}", keys.len()));
-                        emit_hotkey(&app, "preview", &keys);
-                    }
-                    hotkey_logic::Capture::Done(keys) => {
-                        let names =
-                            hotkey_logic::combo_names(&keys).expect("validated at capture");
-                        {
-                            let mut cfg = state.config.lock().unwrap();
-                            cfg.hotkey = names;
-                            crate::config::save(&cfg);
-                        }
-                        apply_combo(&keys);
-                        tracker = hotkey_logic::HoldTracker::new(keys.clone());
-                        end_capture(&state);
-                        was_capturing = false;
-                        applog::log("hotkey-rebound");
-                        emit_hotkey(&app, "set", &keys);
-                    }
-                    hotkey_logic::Capture::Invalid => {
-                        end_capture(&state);
-                        was_capturing = false;
-                        applog::log("hotkey-capture-invalid");
-                        emit_hotkey(&app, "invalid", &[]);
-                    }
-                    hotkey_logic::Capture::Cancelled => {
-                        end_capture(&state);
-                        was_capturing = false;
-                        applog::log("hotkey-capture-cancelled");
-                        emit_hotkey(&app, "cancelled", &[]);
-                    }
-                }
-                continue;
-            }
-
-            if was_capturing {
-                // Capture ended from outside (watchdog, or the window lost
-                // focus). Rebuild the tracker so keys held during capture
-                // cannot look like the start of a dictation.
-                was_capturing = false;
-                tracker = hotkey_logic::HoldTracker::new(combo_from_config(&state));
-            }
-
             match tracker.on_event(ev) {
                 hotkey_logic::Action::None => {}
                 hotkey_logic::Action::Start => {

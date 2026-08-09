@@ -4,7 +4,7 @@
 //! restart. The key is kept separate from Config because it lives in
 //! Credential Manager, never in config.json.
 
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
 use crate::audio::AudioEngine;
@@ -19,11 +19,6 @@ pub struct AppState {
     /// Bumped whenever a dictation is superseded; a stale worker checks this
     /// before it touches the pill.
     pub generation: Arc<AtomicU64>,
-    /// True from "Change hotkey" until the combo lands, is refused, or times
-    /// out. While true the machine's keyboard is being swallowed.
-    pub capturing: Arc<AtomicBool>,
-    /// Stops a watchdog from cancelling a capture session it did not start.
-    pub capture_gen: Arc<AtomicU64>,
 }
 
 impl AppState {
@@ -33,8 +28,6 @@ impl AppState {
             key: Arc::new(Mutex::new(key)),
             audio,
             generation: Arc::new(AtomicU64::new(0)),
-            capturing: Arc::new(AtomicBool::new(false)),
-            capture_gen: Arc::new(AtomicU64::new(0)),
         }
     }
 }

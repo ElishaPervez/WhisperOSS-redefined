@@ -31,9 +31,6 @@ pub fn run() {
             commands::save_api_key,
             commands::list_microphones,
             commands::set_microphone,
-            commands::begin_hotkey_capture,
-            commands::cancel_hotkey_capture,
-            commands::report_blur,
         ])
         .setup(|app| {
             applog::log("app-start");
