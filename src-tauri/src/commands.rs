@@ -118,7 +118,10 @@ pub fn begin_hotkey_capture(app: tauri::AppHandle, state: State<AppState>) {
     let my_gen = state.capture_gen.load(Ordering::SeqCst);
     state.capturing.store(true, Ordering::SeqCst);
     hook::set_capture(true);
-    applog::log("hotkey-capture-begin");
+    applog::log(&format!(
+        "hotkey-capture-begin hook_flag={}",
+        hook::is_capturing()
+    ));
 
     let capturing = state.capturing.clone();
     let capture_gen = state.capture_gen.clone();
@@ -140,15 +143,17 @@ pub fn begin_hotkey_capture(app: tauri::AppHandle, state: State<AppState>) {
 }
 
 #[tauri::command]
-pub fn cancel_hotkey_capture(app: tauri::AppHandle, state: State<AppState>) {
+pub fn cancel_hotkey_capture(app: tauri::AppHandle, state: State<AppState>, reason: String) {
     if state.capturing.swap(false, Ordering::SeqCst) {
         hook::set_capture(false);
         state.capture_gen.fetch_add(1, Ordering::SeqCst);
-        applog::log("hotkey-capture-cancelled-by-window");
+        applog::log(&format!("hotkey-capture-cancelled reason={reason}"));
         let _ = app.emit(
             "hotkey",
             serde_json::json!({ "phase": "cancelled", "keys": [] }),
         );
+    } else {
+        applog::log(&format!("hotkey-capture-cancel-ignored reason={reason}"));
     }
 }
 

@@ -167,7 +167,7 @@ el("mic").onchange = async () => {
 // --- hotkey rebind ---
 el("change-hotkey").onclick = async () => {
   if (capturing) {
-    await invoke("cancel_hotkey_capture");
+    await invoke("cancel_hotkey_capture", { reason: "button" });
     return;
   }
   setCapturing(true);
@@ -199,7 +199,7 @@ listen("hotkey", ({ payload }) => {
 
 // Clicking away mid-rebind must not leave the keyboard swallowed.
 window.addEventListener("blur", () => {
-  if (capturing) invoke("cancel_hotkey_capture");
+  if (capturing) invoke("cancel_hotkey_capture", { reason: "blur" });
 });
 
 load();

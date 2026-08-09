@@ -111,13 +111,19 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
         let mut was_capturing = false;
 
         for ev in rx {
+            let capturing_now = state.capturing.load(Ordering::SeqCst);
+            if capturing_now != was_capturing {
+                applog::log(&format!("pipeline-capture-flag={capturing_now}"));
+            }
             if state.capturing.load(Ordering::SeqCst) {
                 if !was_capturing {
                     capture = hotkey_logic::CaptureBuffer::new();
                     was_capturing = true;
                 }
+                applog::log("pipeline-capture-event");
                 match capture.on_event(ev) {
                     hotkey_logic::Capture::Pending(keys) => {
+                        applog::log(&format!("hotkey-capture-pending n={}", keys.len()));
                         emit_hotkey(&app, "preview", &keys);
                     }
                     hotkey_logic::Capture::Done(keys) => {

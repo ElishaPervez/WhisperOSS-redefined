@@ -58,6 +58,11 @@ pub fn set_capture(on: bool) {
     CAPTURE.store(on, Ordering::SeqCst);
 }
 
+/// Read back for diagnostics: proves whether the store reached this module.
+pub fn is_capturing() -> bool {
+    CAPTURE.load(Ordering::SeqCst)
+}
+
 unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0 {
         let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
@@ -87,6 +92,8 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             }
 
             if CAPTURE.load(Ordering::SeqCst) {
+                // Diagnostic only — no key identity, per the privacy rule.
+                crate::applog::log(if down { "hook-swallow-down" } else { "hook-swallow-up" });
                 return LRESULT(1);
             }
 
