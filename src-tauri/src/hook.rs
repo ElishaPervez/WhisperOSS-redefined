@@ -5,7 +5,7 @@
 //! into the focused app. Modifier keys are never swallowed.
 //! PRIVACY: key events are never logged — only forwarded in memory.
 
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::OnceLock;
 
@@ -26,6 +26,10 @@ static SUPPRESS_VK: AtomicU32 = AtomicU32::new(0);
 static REQUIRED_MODS: AtomicU32 = AtomicU32::new(0);
 static MODS_DOWN: AtomicU32 = AtomicU32::new(0);
 
+// While true, every key is eaten. Only set by begin_hotkey_capture, which
+// also arms a watchdog that clears it no matter what happens next.
+static CAPTURE: AtomicBool = AtomicBool::new(false);
+
 const CTRL_BIT: u32 = 1;
 const WIN_BIT: u32 = 2;
 const ALT_BIT: u32 = 4;
@@ -45,6 +49,13 @@ pub fn set_suppression(other_vk: Option<u32>, required_modifiers: &[Key]) {
     let mask = required_modifiers.iter().map(|&k| modifier_bit(k)).fold(0, |a, b| a | b);
     REQUIRED_MODS.store(mask, Ordering::SeqCst);
     SUPPRESS_VK.store(other_vk.unwrap_or(0), Ordering::SeqCst);
+}
+
+/// Swallow every key while a new combo is being recorded, so pressing Win
+/// cannot open the Start menu and the combo cannot leak into whatever app
+/// is focused. Key events are still forwarded to the pipeline.
+pub fn set_capture(on: bool) {
+    CAPTURE.store(on, Ordering::SeqCst);
 }
 
 unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -73,6 +84,10 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
             };
             if let Some(tx) = SENDER.get() {
                 let _ = tx.send(ev);
+            }
+
+            if CAPTURE.load(Ordering::SeqCst) {
+                return LRESULT(1);
             }
 
             // Swallow the combo's regular key while its modifiers are held.
