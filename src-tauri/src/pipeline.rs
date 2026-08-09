@@ -231,9 +231,9 @@ fn wants_formatting(use_formatter: bool, casual: bool) -> bool {
 /// Privacy paste. Returns true only if the text was staged with the privacy
 /// formats AND actually pulled by the target app.
 fn paste(text: &str) -> bool {
-    let previous = clipboard::snapshot_text();
+    let previous = clipboard::snapshot();
     if previous.is_none() {
-        applog::log("clipboard-snapshot-empty-or-nontext");
+        applog::log("clipboard-snapshot-empty");
     }
     if !clipboard::stage(text, previous) {
         applog::log("paste-aborted-privacy-staging-failed");

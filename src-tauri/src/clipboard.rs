@@ -6,8 +6,8 @@
 //! Restore only happens if we still own the clipboard, so a user copy in
 //! between is never clobbered (fixes v1's bug).
 //!
-//! M1 limitation (documented in the plan header): snapshot/restore is plain
-//! text only. A non-text clipboard (image, files) is logged and not restored.
+//! The snapshot carries every HGLOBAL-backed format (text, images, copied
+//! files, rich text). Oversized clipboards fall back to text only.
 
 use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::sync::Mutex;
@@ -16,11 +16,11 @@ use std::time::{Duration, Instant};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HANDLE, HGLOBAL, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::DataExchange::{
-    CloseClipboard, EmptyClipboard, GetClipboardData, GetClipboardOwner,
-    OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
+    CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData,
+    GetClipboardOwner, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
 };
 use windows::Win32::System::Memory::{
-    GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE,
+    GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -40,7 +40,7 @@ const WM_STAGE: u32 = WM_APP + 1;
 const WM_RESTORE: u32 = WM_APP + 2;
 
 static PENDING: Mutex<Option<Vec<u16>>> = Mutex::new(None);
-static RESTORE_TO: Mutex<Option<Vec<u16>>> = Mutex::new(None);
+static RESTORE_TO: Mutex<Option<Snapshot>> = Mutex::new(None);
 static STAGE_OK: AtomicBool = AtomicBool::new(false);
 static STAGE_DONE: AtomicBool = AtomicBool::new(false);
 static RENDERED: AtomicBool = AtomicBool::new(false);
@@ -50,17 +50,43 @@ pub fn to_utf16z(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-/// Copy text into an HGLOBAL and put it on the (already open) clipboard.
-unsafe fn set_unicode_text(text: &[u16]) -> bool {
-    let bytes = text.len() * 2;
-    let Ok(hmem) = GlobalAlloc(GMEM_MOVEABLE, bytes) else { return false };
+const CF_DIB: u32 = 8;
+const CF_HDROP: u32 = 15;
+const CF_DIBV5: u32 = 17;
+/// A clipboard bigger than this is not cloned into memory; text survives,
+/// the rest is let go. Stops a copied video from doubling its RAM.
+const MAX_SNAPSHOT_BYTES: usize = 16 * 1024 * 1024;
+
+/// Everything on the user's clipboard that can be put back after our paste.
+pub struct Snapshot {
+    /// (format id, raw bytes) — only formats whose data lives in an HGLOBAL.
+    entries: Vec<(u32, Vec<u8>)>,
+}
+
+/// Formats worth carrying across a paste. The four standard ones are byte
+/// buffers; 0xC000 and up are app-registered names (HTML, RTF, drop effects)
+/// and are byte buffers by convention. Everything else is either synthesized
+/// by Windows from a kept format or is a handle that cannot be copied.
+fn should_snapshot(format: u32) -> bool {
+    matches!(format, CF_UNICODETEXT | CF_DIB | CF_HDROP | CF_DIBV5) || format >= 0xC000
+}
+
+/// Copy bytes into an HGLOBAL and put it on the (already open) clipboard.
+unsafe fn write_format(format: u32, bytes: &[u8]) -> bool {
+    let Ok(hmem) = GlobalAlloc(GMEM_MOVEABLE, bytes.len()) else { return false };
     let ptr = GlobalLock(hmem);
     if ptr.is_null() {
         return false;
     }
-    std::ptr::copy_nonoverlapping(text.as_ptr() as *const u8, ptr as *mut u8, bytes);
+    std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr as *mut u8, bytes.len());
     let _ = GlobalUnlock(hmem);
-    SetClipboardData(CF_UNICODETEXT, Some(HANDLE(hmem.0))).is_ok()
+    SetClipboardData(format, Some(HANDLE(hmem.0))).is_ok()
+}
+
+/// Copy text into an HGLOBAL and put it on the (already open) clipboard.
+unsafe fn set_unicode_text(text: &[u16]) -> bool {
+    let bytes = std::slice::from_raw_parts(text.as_ptr() as *const u8, text.len() * 2);
+    write_format(CF_UNICODETEXT, bytes)
 }
 
 unsafe fn set_privacy_formats() -> bool {
@@ -140,8 +166,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             }
             if open_clipboard_retrying(hwnd) {
                 let _ = EmptyClipboard();
-                if let Some(prev) = RESTORE_TO.lock().unwrap().take() {
-                    let _ = set_unicode_text(&prev);
+                if let Some(snap) = RESTORE_TO.lock().unwrap().take() {
+                    for (format, bytes) in &snap.entries {
+                        let _ = write_format(*format, bytes);
+                    }
                 }
                 let _ = CloseClipboard();
                 applog::log("clipboard-restored");
@@ -198,36 +226,66 @@ fn post(msg: u32) {
     }
 }
 
-/// Read current clipboard text (None if empty or non-text).
-pub fn snapshot_text() -> Option<String> {
+/// Bytes of one HGLOBAL-backed clipboard format. The clipboard must be open.
+unsafe fn read_format(format: u32) -> Option<Vec<u8>> {
+    let handle = GetClipboardData(format).ok()?;
+    let hglobal = HGLOBAL(handle.0);
+    let size = GlobalSize(hglobal);
+    if size == 0 {
+        return None;
+    }
+    let ptr = GlobalLock(hglobal) as *const u8;
+    if ptr.is_null() {
+        return None;
+    }
+    let bytes = std::slice::from_raw_parts(ptr, size).to_vec();
+    let _ = GlobalUnlock(hglobal);
+    Some(bytes)
+}
+
+/// Copy every restorable format off the clipboard. None means there is
+/// nothing we can put back. An oversized clipboard keeps only its text.
+pub fn snapshot() -> Option<Snapshot> {
     unsafe {
         let hwnd = HWND(OWNER_HWND.load(Ordering::SeqCst) as *mut _);
         if !open_clipboard_retrying(hwnd) {
             return None;
         }
-        let result = GetClipboardData(CF_UNICODETEXT).ok().and_then(|h| {
-            let ptr = GlobalLock(HGLOBAL(h.0)) as *const u16;
-            if ptr.is_null() {
-                return None;
+        let mut entries: Vec<(u32, Vec<u8>)> = Vec::new();
+        let mut total = 0usize;
+        let mut oversized = false;
+        let mut format = EnumClipboardFormats(0);
+        while format != 0 {
+            if should_snapshot(format) {
+                if let Some(bytes) = read_format(format) {
+                    total += bytes.len();
+                    if total > MAX_SNAPSHOT_BYTES {
+                        oversized = true;
+                    } else {
+                        entries.push((format, bytes));
+                    }
+                }
             }
-            let mut len = 0usize;
-            while *ptr.add(len) != 0 {
-                len += 1;
-            }
-            let s = String::from_utf16_lossy(std::slice::from_raw_parts(ptr, len));
-            let _ = GlobalUnlock(HGLOBAL(h.0));
-            Some(s)
-        });
+            format = EnumClipboardFormats(format);
+        }
         let _ = CloseClipboard();
-        result
+        if oversized {
+            applog::log("clipboard-snapshot-oversized-keeping-text-only");
+            entries.retain(|(f, _)| *f == CF_UNICODETEXT);
+        }
+        if entries.is_empty() {
+            None
+        } else {
+            Some(Snapshot { entries })
+        }
     }
 }
 
 /// Stage `text` for a privacy paste. Returns false if the privacy formats
 /// could not be set — the caller MUST abort the paste in that case.
-pub fn stage(text: &str, restore_to: Option<String>) -> bool {
+pub fn stage(text: &str, restore_to: Option<Snapshot>) -> bool {
     *PENDING.lock().unwrap() = Some(to_utf16z(text));
-    *RESTORE_TO.lock().unwrap() = restore_to.map(|s| to_utf16z(&s));
+    *RESTORE_TO.lock().unwrap() = restore_to;
     RENDERED.store(false, Ordering::SeqCst);
     STAGE_DONE.store(false, Ordering::SeqCst);
     post(WM_STAGE);
@@ -293,5 +351,24 @@ mod tests {
         let v = to_utf16z("Hi ✓");
         assert_eq!(v.last(), Some(&0u16));
         assert_eq!(String::from_utf16_lossy(&v[..v.len() - 1]), "Hi ✓");
+    }
+
+    #[test]
+    fn snapshot_format_filter() {
+        // kept: the four standard formats whose bytes can be copied
+        assert!(should_snapshot(13)); // Unicode text
+        assert!(should_snapshot(8));  // DIB image (screenshots)
+        assert!(should_snapshot(17)); // DIBv5 image
+        assert!(should_snapshot(15)); // copied files (HDROP)
+        // kept: everything app-registered (HTML, RTF, drop effects)
+        assert!(should_snapshot(0xC000));
+        assert!(should_snapshot(0xC123));
+        // dropped: synthesized or handle-based formats
+        assert!(!should_snapshot(1));      // ANSI text — synthesized from Unicode
+        assert!(!should_snapshot(2));      // bitmap — a GDI handle, not bytes
+        assert!(!should_snapshot(3));      // metafile
+        assert!(!should_snapshot(14));     // enhanced metafile
+        assert!(!should_snapshot(16));     // locale — synthesized
+        assert!(!should_snapshot(0x0083)); // owner-display range
     }
 }
