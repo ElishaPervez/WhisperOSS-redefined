@@ -2,12 +2,21 @@
 
 **Status:** Task 7 verification failed. Checks 1–4 (microphone) PASS. Check 5 (rebind) FAILS: no combo binds. Holding Ctrl+Space reverts the display to Ctrl+Win; every other combo produces no visible response at all.
 
+**Human findings that narrow this sharply (from the failed run):**
+
+- Pressing **Space alone** cancels the rebind. The "Change hotkey" button keeps keyboard focus after being clicked, so Space re-activates it and the button's own cancel path fires. Ctrl+Space "responding" was this, not the combo being recognised.
+- Pressing **Ctrl+Esc** cancels — that is the Windows Start-menu shortcut, so it reached the OS.
+- Pressing **Esc alone** does NOT cancel, even though the on-screen hint promises it does. Escape is handled inside the capture recorder, so the recorder is not receiving events either.
+
+Together: during a rebind, keystrokes are reaching the focused window and the operating system, and the capture recorder sees nothing. **Neither the keyboard hook nor the dictation loop is acting on the capture flag — yet `hotkey-capture-begin` is written to the log, which happens only after both flags have been set.** That contradiction is what this plan measures.
+
 **Why this is a diagnostic and not a fix:** the evidence is self-contradictory, so any fix now would be a guess.
 
 - `%APPDATA%\WhisperOSS\log.txt` shows `hotkey-capture-begin` followed by `hotkey-capture-cancelled-by-window` on all five attempts — never `hotkey-rebound`, `hotkey-capture-invalid`, or `hotkey-capture-timeout`.
-- Ctrl+Space reverting the display means Space activated the focused "Change hotkey" button, which fires the button's cancel path. That can only happen if the keyboard hook did **not** swallow Space — yet the log says capture had begun.
 - `hotkey-capture-cancelled-by-window` is logged by BOTH the window-blur handler and the second button click, so the log cannot distinguish them. That is a defect in the instrumentation, not in the feature.
 - Nothing logs whether key events reached the capture recorder at all, so the absence of a result proves nothing.
+
+**Known separate defect, do NOT fix in this plan:** the "Change hotkey" button retains focus, so Space and Enter re-click it. That needs fixing regardless of the root cause and belongs in the fix plan, not here.
 
 **Goal of this plan:** add logging at three boundaries, get one run, read the log. No behaviour changes. No fixes.
 
@@ -156,11 +165,12 @@ Remove-Item "$env:APPDATA\WhisperOSS\log.txt" -ErrorAction SilentlyContinue
 Then `npm run tauri dev`, open settings from the tray, and do exactly this — nothing else, no dictation:
 
 1. Click "Change hotkey". Note whether the button text changes to "Listening — press your keys" and whether the chips become "…".
-2. Hold **Ctrl + Shift** together for about two seconds, then release both.
-3. Wait five seconds without touching anything.
-4. Click "Change hotkey" again. Hold **Ctrl + Space** for about two seconds, then release.
-5. Wait five seconds.
-6. Quit from the tray.
+2. Press **Space once, on its own.** If the button flips back to "Change hotkey", keystrokes are not being blocked — note that and click "Change hotkey" again before continuing.
+3. Hold **Ctrl + Shift** together for about two seconds, then release both.
+4. Wait five seconds without touching anything.
+5. If the button still says "Listening", press **Esc** once.
+6. Wait five seconds.
+7. Quit from the tray.
 
 Then paste the whole log:
 
