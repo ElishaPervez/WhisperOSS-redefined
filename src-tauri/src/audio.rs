@@ -49,6 +49,10 @@ pub struct AudioEngine {
     /// The device the running stream actually opened — not necessarily the
     /// one the user picked, since a refused device falls back to the default.
     active_device: Mutex<Option<String>>,
+    /// The picked device we last tried to move back to and could not open.
+    /// Checked so a device that is listed but permanently refusing cannot
+    /// cause a reopen attempt every two seconds.
+    refused_reclaim: Mutex<Option<String>>,
     /// Carries the next device name to the stream thread. The stream object
     /// itself can only exist on that thread.
     device_tx: Mutex<Sender<Option<String>>>,
@@ -66,6 +70,7 @@ impl AudioEngine {
             peak: AtomicU16::new(0),
             healthy: AtomicBool::new(false),
             active_device: Mutex::new(None),
+            refused_reclaim: Mutex::new(None),
             device_tx: Mutex::new(device_tx),
         });
 
@@ -94,6 +99,26 @@ impl AudioEngine {
                             drop(stream.take());
                             e.reset_buffers();
                             stream = reopen_quietly(&e, &wanted);
+                        } else {
+                            // Healthy, but possibly on a fallback. If the
+                            // device the user picked is back, move to it.
+                            match e.reclaim_check(&wanted) {
+                                Reclaim::Attempt => {
+                                    applog::log("audio-reclaiming-preferred-device");
+                                    drop(stream.take());
+                                    e.reset_buffers();
+                                    stream = open(&e, &wanted, true);
+                                    if e.active_device().as_deref() != wanted.as_deref() {
+                                        // Listed but would not open: remember,
+                                        // or this repeats every two seconds.
+                                        *e.refused_reclaim.lock().unwrap() = wanted.clone();
+                                    }
+                                }
+                                Reclaim::ForgetRefusal => {
+                                    *e.refused_reclaim.lock().unwrap() = None;
+                                }
+                                Reclaim::Stay => {}
+                            }
                         }
                     }
                     Err(RecvTimeoutError::Disconnected) => break,
@@ -129,11 +154,27 @@ impl AudioEngine {
         let _ = self.app.emit("mic-changed", ());
     }
 
+    /// The two-second tick's decision about moving back to the picked device.
+    /// The steady state — already on the picked device, or no pick at all —
+    /// returns before enumerating devices, so the tick stays free.
+    fn reclaim_check(&self, wanted: &Option<String>) -> Reclaim {
+        let Some(name) = wanted.as_deref() else { return Reclaim::Stay };
+        let active = self.active_device();
+        if active.as_deref() == Some(name) {
+            return Reclaim::Stay;
+        }
+        let recording = self.recording.lock().unwrap().is_some();
+        let listed = list_input_devices().iter().any(|d| d == name);
+        let refused = self.refused_reclaim.lock().unwrap().clone();
+        reclaim_step(Some(name), active.as_deref(), recording, listed, refused.as_deref())
+    }
+
     /// Change the capture device without restarting the app. The pre-roll
     /// buffer is thrown away because the new device may run at a different
     /// sample rate, and splicing the two would garble the first half-second.
     pub fn switch_device(&self, preferred: Option<String>) {
         applog::log("audio-switch-device-requested");
+        *self.refused_reclaim.lock().unwrap() = None;
         let _ = self.device_tx.lock().unwrap().send(preferred);
     }
 
