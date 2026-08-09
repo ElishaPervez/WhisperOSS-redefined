@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use tauri::{Emitter, Manager};
 
-use crate::{applog, clipboard, dsp, groq, hook, hotkey_logic, overlay_state};
+use crate::{applog, clipboard, dsp, groq, hook, hotkey_logic, overlay_state, position};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const PASTE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(5);
@@ -35,12 +35,13 @@ impl Ui {
             .emit("ui", overlay_state::ui_payload(state, message));
     }
 
-    fn show(&self, my_gen: u64) {
+    fn show(&self, my_gen: u64, logical_w: f64) {
         if !self.current(my_gen) {
             return;
         }
         if let Some(w) = self.app.get_webview_window("overlay") {
-            let _ = crate::position_overlay(&self.app);
+            let _ = w.set_size(tauri::LogicalSize::new(logical_w, position::PILL_LOGICAL_H));
+            let _ = crate::position_overlay(&self.app, logical_w);
             let _ = w.show();
         }
     }
@@ -57,9 +58,10 @@ impl Ui {
         }
     }
 
-    /// Error state per design: red pill, 2 s, fade. Blocking — call off-thread.
+    /// Error state per design: red pill sized to its message, 2 s, fade.
+    /// Blocking — call off-thread.
     fn show_error(&self, my_gen: u64, message: &str) {
-        self.show(my_gen);
+        self.show(my_gen, position::pill_width_for(message));
         self.emit(my_gen, "error", message);
         std::thread::sleep(Duration::from_millis(overlay_state::ERROR_HOLD_MS));
         self.fade_out_and_hide(my_gen);
@@ -111,7 +113,7 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                         continue;
                     }
                     audio.start_recording();
-                    ui.show(my_gen);
+                    ui.show(my_gen, position::PILL_LOGICAL_W);
                     ui.emit(my_gen, "listening", "");
                     applog::log("recording-start");
                 }

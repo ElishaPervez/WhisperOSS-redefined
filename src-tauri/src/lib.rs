@@ -133,7 +133,7 @@ pub(crate) fn show_first_run(app: &tauri::AppHandle) {
 
 /// Bottom-center of the monitor the cursor is on, 26 logical px above the
 /// taskbar (Milestone 0, unchanged).
-pub(crate) fn position_overlay(app: &tauri::AppHandle) -> tauri::Result<()> {
+pub(crate) fn position_overlay(app: &tauri::AppHandle, logical_w: f64) -> tauri::Result<()> {
     let window = app
         .get_webview_window("overlay")
         .expect("overlay window missing from tauri.conf.json");
@@ -163,7 +163,7 @@ pub(crate) fn position_overlay(app: &tauri::AppHandle) -> tauri::Result<()> {
         width: wa.size.width,
         height: wa.size.height,
     };
-    let (x, y) = position::pill_position(work_area, monitor.scale_factor());
+    let (x, y) = position::pill_position(work_area, monitor.scale_factor(), logical_w);
     window.set_position(PhysicalPosition::new(x, y))?;
     Ok(())
 }
