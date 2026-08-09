@@ -1,6 +1,5 @@
 const { invoke } = window.__TAURI__.core;
 const { getCurrentWindow } = window.__TAURI__.window;
-const { listen } = window.__TAURI__.event;
 
 const win = getCurrentWindow();
 document.getElementById("min").onclick = () => win.minimize();
@@ -26,19 +25,9 @@ const KEY_LABELS = {
 };
 const keyLabel = (n) => KEY_LABELS[n] || n.toUpperCase();
 
-let currentHotkey = ["ctrl", "win"];
-let capturing = false;
-
-function renderCombo(names, listening) {
+function renderCombo(names) {
   const box = el("combo-keys");
   box.innerHTML = "";
-  if (!names.length) {
-    const s = document.createElement("span");
-    s.className = "key";
-    s.textContent = listening ? "…" : "—";
-    box.appendChild(s);
-    return;
-  }
   names.forEach((n, i) => {
     if (i) {
       const p = document.createElement("span");
@@ -51,18 +40,6 @@ function renderCombo(names, listening) {
     k.textContent = keyLabel(n);
     box.appendChild(k);
   });
-}
-
-function setHint(text, kind) {
-  const h = el("hotkey-hint");
-  h.textContent = text;
-  h.className = `hint ${kind || ""}`;
-}
-
-function setCapturing(on) {
-  capturing = on;
-  document.body.classList.toggle("capturing", on);
-  el("change-hotkey").textContent = on ? "Listening — press your keys" : "Change hotkey";
 }
 
 async function loadMics(selected) {
@@ -97,8 +74,7 @@ async function load() {
   paintToggle(el("autostart"), cfg.run_on_startup);
   applyTheme(cfg.theme);
 
-  currentHotkey = cfg.hotkey;
-  renderCombo(currentHotkey, false);
+  renderCombo(cfg.hotkey);
   await loadMics(cfg.input_device);
 
   const hasKey = await invoke("has_api_key");
@@ -163,44 +139,5 @@ el("mic").onchange = async () => {
   await invoke("set_microphone", { value: value || null });
   el("status-text").textContent = "Microphone updated";
 };
-
-// --- hotkey rebind ---
-el("change-hotkey").onclick = async () => {
-  if (capturing) {
-    await invoke("cancel_hotkey_capture", { reason: "button" });
-    return;
-  }
-  setCapturing(true);
-  renderCombo([], true);
-  setHint("Hold the keys together, then let go. Esc cancels.", "");
-  await invoke("begin_hotkey_capture");
-};
-
-listen("hotkey", ({ payload }) => {
-  if (payload.phase === "preview") {
-    renderCombo(payload.keys, true);
-    return;
-  }
-  setCapturing(false);
-  if (payload.phase === "set") {
-    currentHotkey = payload.keys;
-    renderCombo(currentHotkey, false);
-    setHint("Hotkey updated", "ok");
-    return;
-  }
-  renderCombo(currentHotkey, false);
-  setHint(
-    payload.phase === "invalid"
-      ? "Needs a modifier and at most one other key"
-      : "Hotkey unchanged",
-    payload.phase === "invalid" ? "err" : ""
-  );
-});
-
-// DIAGNOSTIC: blur no longer cancels — it only reports. The 6 s watchdog is
-// the safety net for this run.
-window.addEventListener("blur", () => {
-  if (capturing) invoke("report_blur");
-});
 
 load();
