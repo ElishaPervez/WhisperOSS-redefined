@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Custom vocabulary - design</title>
+<style>
+  :root {
+    --bg: #101014; --panel: #18181f; --panel2: #1f1f28; --text: #e8e8ec;
+    --muted: #9a9aa6; --accent: #e5484d; --ok: #3fb970; --line: #2c2c38;
+    --chipbg: #26262f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.6 "Segoe UI", system-ui, sans-serif;
+    padding: 40px 24px 80px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin-bottom: 36px; }
+  h2 {
+    font-size: 15px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--accent); margin: 44px 0 14px;
+  }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 22px 26px; margin-bottom: 14px;
+  }
+  .muted { color: var(--muted); }
+  .ok { color: var(--ok); font-weight: 600; }
+  code {
+    background: var(--panel2); padding: 1px 7px; border-radius: 5px;
+    font: 13px/1.5 Consolas, monospace; color: #d7d7e0;
+  }
+  /* settings-row mockup */
+  .mock {
+    background: #131318; border: 1px solid var(--line); border-radius: 8px;
+    padding: 18px 22px; margin-top: 10px;
+  }
+  .mock .rowline {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 4px; border-top: 1px solid var(--line); color: var(--muted);
+    font-size: 13px;
+  }
+  .mock .rowline:first-child { border-top: 0; }
+  .mock .rowline b { color: var(--text); font-size: 14px; }
+  .mock .newrow {
+    border: 1px dashed var(--accent); border-radius: 6px; margin-top: 8px;
+    padding: 14px 16px;
+  }
+  .mock .newrow .title { font-weight: 700; margin-bottom: 2px; }
+  .mock .newrow .desc { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    background: var(--chipbg); border: 1px solid var(--line); border-radius: 999px;
+    padding: 4px 12px; font-size: 13px; display: inline-flex; gap: 8px; align-items: center;
+  }
+  .chip .x { color: var(--muted); font-weight: 700; cursor: default; }
+  .chip.ghost { border-style: dashed; color: var(--muted); background: none; }
+  /* flow diagram */
+  .flow { display: flex; align-items: stretch; gap: 0; margin-top: 12px; flex-wrap: wrap; }
+  .step {
+    flex: 1; min-width: 150px; background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 14px; font-size: 13px;
+  }
+  .step b { display: block; font-size: 13px; margin-bottom: 4px; }
+  .arrow { display: flex; align-items: center; padding: 0 10px; color: var(--muted); font-size: 20px; }
+  .step.hot { border-color: var(--accent); }
+  /* before/after */
+  .ba { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+  .ba .col {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; font: 12.5px/1.7 Consolas, monospace;
+  }
+  .ba .col h3 {
+    margin: 0 0 8px; font: 600 12px/1 "Segoe UI", sans-serif;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+  .add { color: var(--ok); }
+  ul { margin: 8px 0 0; padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 14px; }
+  td, th { border: 1px solid var(--line); padding: 8px 12px; text-align: left; }
+  th { background: var(--panel2); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  @media (max-width: 700px) { .ba { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Custom vocabulary</h1>
+  <div class="sub">A new settings row that teaches Whisper the spellings you care about. Design for approval, nothing built yet.</div>
+
+  <h2>What you will see</h2>
+  <div class="card">
+    <p style="margin-top:0">The settings window gets a seventh row, <b>Custom vocabulary</b>, with tag chips: type a word, press Enter, it becomes a chip; click the <b>x</b> to remove it. Every add or remove saves immediately, same as the toggles. The list starts empty.</p>
+    <div class="mock">
+      <div class="rowline"><b>Groq API key</b><span>unchanged</span></div>
+      <div class="rowline"><b>AI formatting</b><span>unchanged</span></div>
+      <div class="rowline"><b>Casual mode</b><span>unchanged</span></div>
+      <div class="rowline"><b>Microphone</b><span>unchanged</span></div>
+      <div class="rowline"><b>Theme</b><span>unchanged</span></div>
+      <div class="rowline"><b>Start with Windows</b><span>unchanged</span></div>
+      <div class="newrow">
+        <div class="title">Custom vocabulary <span style="color:var(--accent);font-size:11px;letter-spacing:0.1em">NEW</span></div>
+        <div class="desc">Names and jargon Whisper should spell correctly</div>
+        <div class="chips">
+          <span class="chip">Codex <span class="x">&times;</span></span>
+          <span class="chip">Claude <span class="x">&times;</span></span>
+          <span class="chip">OpenAI <span class="x">&times;</span></span>
+          <span class="chip">Anthropic <span class="x">&times;</span></span>
+          <span class="chip">Fable <span class="x">&times;</span></span>
+          <span class="chip ghost">add a word&hellip;</span>
+        </div>
+      </div>
+    </div>
+    <p class="muted" style="margin-bottom:0">The window grows from 640 to 700 px tall so the seventh row does not squeeze the others (the rows share the window height equally, so without this every row would shrink).</p>
+  </div>
+
+  <h2>What happens when you dictate</h2>
+  <div class="card">
+    <div class="flow">
+      <div class="step"><b>You speak</b>"how do I prompt Claude"</div>
+      <div class="arrow">&rarr;</div>
+      <div class="step hot"><b>Upload</b>Audio + your word list ride in the same request</div>
+      <div class="arrow">&rarr;</div>
+      <div class="step hot"><b>Whisper</b>Reads the list as context, so "Claude" beats "clawed"</div>
+      <div class="arrow">&rarr;</div>
+      <div class="step"><b>Paste</b>Correct spelling lands at your cursor</div>
+    </div>
+    <p>It is a bias, not a guarantee: a mumbled word can still come out wrong, but each listed word becomes the model's preferred interpretation whenever the audio is close.</p>
+    <p style="margin-bottom:0">With an <b>empty list, the request is byte-for-byte what the app sends today</b>. The optional AI-formatting pass is untouched either way.</p>
+  </div>
+
+  <h2>What changes under the hood</h2>
+  <div class="card">
+    <div class="ba">
+      <div class="col">
+        <h3>Request today</h3>
+        file: audio.wav<br>
+        model: whisper-large-v3-turbo<br>
+        language: en<br>
+        temperature: 0<br>
+        response_format: json
+      </div>
+      <div class="col">
+        <h3>Request with vocabulary</h3>
+        file: audio.wav<br>
+        model: whisper-large-v3-turbo<br>
+        language: en<br>
+        temperature: 0<br>
+        response_format: json<br>
+        <span class="add">prompt: "Codex, Claude, OpenAI, Anthropic, Fable"</span>
+      </div>
+    </div>
+    <table>
+      <tr><th>Piece</th><th>Change</th></tr>
+      <tr><td>Saved settings file</td><td>New <code>vocabulary</code> list, empty by default. A settings file from an older version simply lacks the key and merges to empty, so nothing can break on upgrade.</td></tr>
+      <tr><td>Save path</td><td>One new command the settings page calls on every chip add/remove, identical in shape to the existing toggle commands. Words are trimmed and case-insensitive duplicates dropped before saving.</td></tr>
+      <tr><td>Transcription request</td><td>Gains the <code>prompt</code> field only when the list is non-empty.</td></tr>
+      <tr><td>Settings window</td><td>Seventh row with the chip editor; window height 640 &rarr; 700.</td></tr>
+      <tr><td>Product spec</td><td>The v2 design doc says "exactly six controls" and lists the settings keys; both statements get updated so the spec stays true.</td></tr>
+    </table>
+  </div>
+
+  <h2>Limits worth knowing</h2>
+  <div class="card">
+    <ul style="margin-top:0">
+      <li><b>Roughly 150 words of budget.</b> Whisper only reads the last ~224 tokens of the prompt; beyond that, the earliest words silently stop having any effect. The settings row will show a soft warning past 50 words rather than hard-blocking.</li>
+      <li><b>Spelling in, spelling out.</b> The exact casing you type is what gets reinforced, so "OpenAI" must be entered as OpenAI.</li>
+      <li><b>Multi-word phrases are fine.</b> A chip can hold "Claude Code"; the list is joined with commas either way.</li>
+    </ul>
+  </div>
+
+  <h2>How it gets verified</h2>
+  <div class="card">
+    <ul style="margin-top:0">
+      <li>Unit tests: settings default/merge/roundtrip for the new list; the words-to-prompt join (trimming, dedupe); the upload includes <code>prompt</code> when words exist and omits it when the list is empty.</li>
+      <li>Manual check: add the five words, dictate a sentence containing them, confirm the spellings land correctly.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>
