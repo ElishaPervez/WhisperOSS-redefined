@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="design-tokens.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100vh; overflow: hidden; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--font-body);
+    display: flex; flex-direction: column;
+    border: 1px solid var(--divider);
+  }
+  .titlebar {
+    height: 44px; flex: none; display: flex; align-items: center;
+    justify-content: space-between; padding-left: 20px;
+  }
+  .brand { display: flex; align-items: center; gap: 11px; }
+  .brand .mark { width: 9px; height: 9px; background: var(--accent); }
+  .brand .name {
+    font-family: var(--font-heading); font-weight: 700; font-size: 11px;
+    letter-spacing: 0.2em;
+  }
+  .winbtns { display: flex; }
+  .winbtn {
+    width: 46px; height: 44px; display: flex; align-items: center;
+    justify-content: center; color: var(--muted); background: none;
+    border: none; cursor: pointer;
+  }
+  .winbtn:hover { background: color-mix(in srgb, var(--text) 8%, transparent); }
+  .winbtn.close:hover { background: var(--accent); color: #fff; }
+
+  .hero { padding: 32px 48px 26px; flex: none; }
+  .hero .kicker {
+    font-size: 11px; letter-spacing: 0.18em; font-weight: 700;
+    color: var(--muted); margin-bottom: 18px;
+  }
+  .hero .combo {
+    font-family: var(--font-heading); font-weight: 700; font-size: 30px;
+    letter-spacing: -0.02em; display: flex; align-items: center; gap: 11px;
+    flex-wrap: wrap;
+  }
+  .key { border: 2px solid var(--divider); padding: 2px 12px; font-size: 23px; }
+  .plus { font-size: 22px; color: var(--muted); }
+  .btn {
+    font-family: var(--font-heading); font-weight: 700; cursor: pointer;
+    border: 1px solid var(--divider); background: none; color: var(--text);
+  }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .change { margin-top: 20px; font-size: 12px; padding: 7px 13px; }
+
+  .divider { height: 2px; background: var(--divider); flex: none; }
+  .rows { flex: 1; display: flex; flex-direction: column; padding: 0 48px; }
+  .row {
+    flex: 1; display: flex; align-items: center; justify-content: space-between;
+    gap: 24px;
+  }
+  .row + .row { border-top: 1px solid color-mix(in srgb, var(--text) 14%, transparent); }
+  .row .label { font-family: var(--font-heading); font-weight: 700; font-size: 15px; }
+  .row .desc { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .row .ctl { display: flex; align-items: center; gap: 8px; }
+
+  input[type="text"], input[type="password"] {
+    width: 232px; font-size: 13px; padding: 9px 12px; background: var(--surface);
+    color: var(--text); border: 1px solid var(--divider); font-family: var(--font-body);
+  }
+  .icon-btn { padding: 9px 10px; }
+
+  .toggle {
+    width: 48px; height: 26px; border: 2px solid var(--divider); padding: 2px;
+    display: flex; align-items: center; justify-content: flex-start; cursor: pointer;
+  }
+  .toggle .knob { width: 18px; height: 18px; background: var(--muted); }
+  .toggle.on { border-color: var(--accent); background: var(--accent); justify-content: flex-end; }
+  .toggle.on .knob { background: var(--bg); }
+
+  .seg { display: flex; border: 1px solid var(--divider); }
+  .seg button {
+    padding: 8px 18px; font-size: 13px; font-family: var(--font-heading);
+    background: none; color: var(--text); border: none; cursor: pointer;
+  }
+  .seg button + button { border-left: 1px solid var(--divider); }
+  .seg button.active { background: var(--text); color: var(--bg); font-weight: 700; }
+
+  .mic-static {
+    width: 232px; border: 1px solid var(--divider); padding: 9px 12px;
+    font-size: 13px; color: var(--muted);
+  }
+
+  .statusbar {
+    height: 46px; flex: none;
+    border-top: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 48px; font-size: 12px; color: var(--muted);
+  }
+  .status-left { display: flex; align-items: center; gap: 10px; }
+  .status-left .dot { width: 7px; height: 7px; background: var(--accent); }
+  .keyfeedback { font-size: 12px; margin-left: 4px; }
+  .keyfeedback.ok { color: #3fb970; }
+  .keyfeedback.err { color: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="titlebar" data-tauri-drag-region>
+    <div class="brand"><div class="mark"></div><div class="name">WHISPEROSS</div></div>
+    <div class="winbtns">
+      <button class="winbtn" id="min" title="Minimize">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1 6h10"/></svg>
+      </button>
+      <button class="winbtn close" id="close" title="Close to tray">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="hero">
+    <div class="kicker">GLOBAL HOTKEY</div>
+    <div class="combo">
+      <span>Hold</span>
+      <span class="key" id="key1">Ctrl</span>
+      <span class="plus">+</span>
+      <span class="key" id="key2">Win</span>
+      <span>— speak — release</span>
+    </div>
+    <button class="btn change" id="change-hotkey" disabled title="Rebind arrives in the next update">Change hotkey</button>
+  </div>
+  <div class="divider"></div>
+
+  <div class="rows">
+    <div class="row">
+      <div>
+        <div class="label">Groq API key</div>
+        <div class="desc">Stored locally on this PC <span class="keyfeedback" id="key-feedback"></span></div>
+      </div>
+      <div class="ctl">
+        <input type="password" id="api-key" placeholder="gsk_…" />
+        <button class="btn icon-btn" id="toggle-key" title="Show key">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>
+        </button>
+        <button class="btn btn-primary" id="save-key" style="padding:9px 16px">Save</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label">AI formatting</div>
+        <div class="desc">Cleans punctuation and paragraph breaks</div>
+      </div>
+      <div class="toggle" id="formatter" role="switch"><div class="knob"></div></div>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label">Casual mode</div>
+        <div class="desc">Lowercase, light emoji</div>
+      </div>
+      <div class="toggle" id="casual" role="switch"><div class="knob"></div></div>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label">Microphone</div>
+        <div class="desc">Input device used while dictating · picker in next update</div>
+      </div>
+      <div class="mic-static" id="mic-name">System default</div>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label">Theme</div>
+        <div class="desc">Follows Windows by default</div>
+      </div>
+      <div class="seg" id="theme">
+        <button data-theme="auto">Auto</button>
+        <button data-theme="light">Light</button>
+        <button data-theme="dark">Dark</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label">Start with Windows</div>
+        <div class="desc">Runs quietly in the tray</div>
+      </div>
+      <div class="toggle" id="autostart" role="switch"><div class="knob"></div></div>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <div class="status-left"><span class="dot"></span><span id="status-text">Ready</span></div>
+    <div>v1.0</div>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

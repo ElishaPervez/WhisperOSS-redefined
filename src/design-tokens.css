@@ -1,0 +1,39 @@
+/* WhisperOSS design tokens (from the Modernist design system export).
+   Light is the default; dark applies via OS preference OR an explicit
+   data-theme, so "auto" = follow Windows, "light"/"dark" = force. */
+:root {
+  --bg: #f8f7f7;
+  --surface: #eae9e9;
+  --text: #201e1d;
+  --accent: #ec3013;
+  --divider: color-mix(in srgb, #201e1d 30%, transparent);
+  --muted: color-mix(in srgb, #201e1d 55%, transparent);
+  --font-heading: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #191817;
+    --surface: #232120;
+    --text: #f3f2f2;
+    --accent: #ff563c;
+    --divider: color-mix(in srgb, #f3f2f2 30%, transparent);
+    --muted: color-mix(in srgb, #f3f2f2 55%, transparent);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #191817;
+  --surface: #232120;
+  --text: #f3f2f2;
+  --accent: #ff563c;
+  --divider: color-mix(in srgb, #f3f2f2 30%, transparent);
+  --muted: color-mix(in srgb, #f3f2f2 55%, transparent);
+}
+:root[data-theme="light"] {
+  --bg: #f8f7f7;
+  --surface: #eae9e9;
+  --text: #201e1d;
+  --accent: #ec3013;
+  --divider: color-mix(in srgb, #201e1d 30%, transparent);
+  --muted: color-mix(in srgb, #201e1d 55%, transparent);
+}
