@@ -38,6 +38,9 @@ fn pick_device(preferred: &Option<String>) -> Option<cpal::Device> {
 const PRE_ROLL_SECS: f64 = 0.5;
 
 pub struct AudioEngine {
+    /// Kept so the engine can tell the settings window when the microphone
+    /// situation changes while that window is already open.
+    app: tauri::AppHandle,
     ring: Mutex<VecDeque<i16>>,
     recording: Mutex<Option<Vec<i16>>>,
     rate: AtomicU32,
@@ -53,8 +56,10 @@ pub struct AudioEngine {
 
 impl AudioEngine {
     pub fn start(app: tauri::AppHandle, preferred: Option<String>) -> Arc<AudioEngine> {
+        let app_for_engine = app.clone();
         let (device_tx, device_rx) = channel::<Option<String>>();
         let engine = Arc::new(AudioEngine {
+            app: app_for_engine,
             ring: Mutex::new(VecDeque::new()),
             recording: Mutex::new(None),
             rate: AtomicU32::new(16_000),
@@ -115,6 +120,13 @@ impl AudioEngine {
 
     pub fn active_device(&self) -> Option<String> {
         self.active_device.lock().unwrap().clone()
+    }
+
+    /// Only called on real transitions — lost, recovered, switched — so an
+    /// already-open settings window refreshes without the two-second retry
+    /// loop firing an event every two seconds while a device stays broken.
+    fn announce_change(&self) {
+        let _ = self.app.emit("mic-changed", ());
     }
 
     /// Change the capture device without restarting the app. The pre-roll
@@ -190,16 +202,19 @@ fn open(engine: &Arc<AudioEngine>, preferred: &Option<String>) -> Option<cpal::S
             if stream.play().is_ok() {
                 engine.healthy.store(true, Ordering::SeqCst);
                 applog::log("audio-stream-started");
+                engine.announce_change();
                 Some(stream)
             } else {
                 applog::log("audio-stream-play-failed");
                 *engine.active_device.lock().unwrap() = None;
+                engine.announce_change();
                 None
             }
         }
         Err(msg) => {
             applog::log(&format!("audio-stream-error {msg}"));
             *engine.active_device.lock().unwrap() = None;
+            engine.announce_change();
             None
         }
     }
@@ -221,6 +236,7 @@ fn reopen_quietly(engine: &Arc<AudioEngine>, preferred: &Option<String>) -> Opti
     if stream.play().is_ok() {
         engine.healthy.store(true, Ordering::SeqCst);
         applog::log("audio-stream-recovered");
+        engine.announce_change();
         Some(stream)
     } else {
         *engine.active_device.lock().unwrap() = None;
@@ -249,6 +265,7 @@ fn build_stream(
     let err_fn = move |err| {
         applog::log(&format!("audio-callback-error {err}"));
         e_err.healthy.store(false, Ordering::SeqCst);
+        e_err.announce_change();
     };
 
     let stream = match config.sample_format() {
