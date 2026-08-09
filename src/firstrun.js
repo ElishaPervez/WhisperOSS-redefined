@@ -44,7 +44,7 @@ async function validate() {
   el("validate").textContent = "Checking…";
   try {
     await invoke("save_api_key", { key });
-    win.hide();
+    await invoke("finish_first_run");
   } catch (msg) {
     setError(String(msg));
   } finally {

@@ -2,7 +2,7 @@
 //! persists to config.json, and (where relevant) applies immediately. The
 //! window never touches config.json directly — it goes through these.
 
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::{applog, audio, autostart, config, groq, keys, state::AppState};
 
@@ -98,6 +98,18 @@ pub fn set_microphone(state: State<AppState>, value: Option<String>) {
     persist(&state);
     state.audio.switch_device(value);
     applog::log("setting-microphone-changed");
+}
+
+/// The key was accepted: close the welcome card and hand the user to the
+/// settings window. Without this the window simply disappears and a
+/// first-time user cannot tell the app is still running.
+#[tauri::command]
+pub fn finish_first_run(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("firstrun") {
+        let _ = w.hide();
+    }
+    crate::show_settings(&app);
+    applog::log("first-run-complete");
 }
 
 #[cfg(test)]

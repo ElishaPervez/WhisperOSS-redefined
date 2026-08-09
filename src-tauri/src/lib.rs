@@ -32,6 +32,7 @@ pub fn run() {
             commands::save_api_key,
             commands::list_microphones,
             commands::set_microphone,
+            commands::finish_first_run,
         ])
         .setup(|app| {
             applog::log("app-start");
