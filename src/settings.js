@@ -146,6 +146,15 @@ el("mic").onchange = async () => {
 
 // The window is hidden rather than destroyed when closed, so the webview is
 // only ever loaded once. Re-read on every open.
-listen("settings-shown", () => load());
+listen("settings-shown", async ({ payload }) => {
+  await load();
+  if (payload) {
+    const input = el("api-key");
+    input.value = "";
+    input.type = "password";
+    input.focus();
+    setKeyFeedback("Groq rejected this key — paste a new one", "err");
+  }
+});
 
 load();

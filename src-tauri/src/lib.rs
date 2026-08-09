@@ -103,14 +103,24 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-pub(crate) fn show_settings(app: &tauri::AppHandle) {
+fn show_settings_inner(app: &tauri::AppHandle, focus_key: bool) {
     if let Some(w) = app.get_webview_window("settings") {
         let _ = w.show();
         let _ = w.set_focus();
         // The webview loaded once, at startup, while this window was hidden.
         // Tell it to re-read everything so it never shows stale values.
-        let _ = w.emit("settings-shown", ());
+        let _ = w.emit("settings-shown", focus_key);
     }
+}
+
+pub(crate) fn show_settings(app: &tauri::AppHandle) {
+    show_settings_inner(app, false);
+}
+
+/// Groq rejected the key: open settings with the cursor already in the key
+/// box, so the fix is one paste away rather than a hunt.
+pub(crate) fn show_settings_at_key(app: &tauri::AppHandle) {
+    show_settings_inner(app, true);
 }
 
 pub(crate) fn show_first_run(app: &tauri::AppHandle) {

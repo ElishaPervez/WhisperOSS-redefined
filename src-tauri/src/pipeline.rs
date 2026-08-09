@@ -191,6 +191,9 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                             Err(e) => {
                                 let (message, detail) = overlay_state::describe_error(&e);
                                 applog::log(&format!("transcribe-error {message} {detail}"));
+                                if matches!(e, groq::GroqError::Unauthorized) {
+                                    crate::show_settings_at_key(&ui.app);
+                                }
                                 ui.show_error(my_gen, message);
                             }
                         }
