@@ -132,8 +132,14 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                     let ui = Ui { app: app.clone(), generation: generation.clone() };
 
                     if dsp::is_effectively_silent(&samples) {
-                        applog::log("silent-discarded");
-                        std::thread::spawn(move || ui.fade_out_and_hide(my_gen));
+                        let wanted = state.config.lock().unwrap().input_device.clone();
+                        if on_fallback_device(&wanted, &audio.active_device()) {
+                            applog::log("silent-on-fallback-device");
+                            std::thread::spawn(move || ui.show_error(my_gen, "Check your mic"));
+                        } else {
+                            applog::log("silent-discarded");
+                            std::thread::spawn(move || ui.fade_out_and_hide(my_gen));
+                        }
                         continue;
                     }
 
@@ -204,6 +210,17 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
     });
 }
 
+/// True when the user picked a specific device but something else is actually
+/// recording. In that state a silent take almost certainly means a broken
+/// microphone rather than a quiet user, so it is worth saying out loud.
+fn on_fallback_device(wanted: &Option<String>, active: &Option<String>) -> bool {
+    match (wanted, active) {
+        (Some(w), Some(a)) => w != a,
+        (Some(_), None) => true,
+        _ => false,
+    }
+}
+
 /// The AI rewrite runs when EITHER toggle is on. Casual is its own trigger,
 /// not a sub-option of formatting; when casual is on, format_text picks the
 /// casual prompt (so casual wins if both are on).
@@ -238,6 +255,7 @@ fn paste(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::wants_formatting;
+    use super::on_fallback_device;
 
     #[test]
     fn formatting_truth_table() {
@@ -245,5 +263,20 @@ mod tests {
         assert!(wants_formatting(true, false));   // formal only
         assert!(wants_formatting(false, true));   // casual only → still formats
         assert!(wants_formatting(true, true));    // both → formats (casual wins in format_text)
+    }
+
+    #[test]
+    fn fallback_detection() {
+        let usb = Some("USB PnP Audio Device".to_string());
+        let nvidia = Some("NVIDIA Broadcast".to_string());
+        // user picked a device and it is the one recording
+        assert!(!on_fallback_device(&usb, &usb));
+        // user picked a device and something else is recording
+        assert!(on_fallback_device(&usb, &nvidia));
+        // user picked a device and nothing is recording at all
+        assert!(on_fallback_device(&usb, &None));
+        // user picked "system default": whatever is recording is correct
+        assert!(!on_fallback_device(&None, &nvidia));
+        assert!(!on_fallback_device(&None, &None));
     }
 }
