@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="design-tokens.css" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100vh; overflow: hidden; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--font-body);
+    display: flex; flex-direction: column;
+    border: 1px solid var(--divider);
+  }
+
+  .titlebar {
+    height: 44px; flex: none; display: flex; align-items: center;
+    justify-content: flex-end;
+  }
+  .winbtn {
+    width: 46px; height: 44px; display: flex; align-items: center;
+    justify-content: center; color: var(--muted); background: none;
+    border: none; cursor: pointer;
+  }
+  .winbtn:hover { background: var(--accent); color: #fff; }
+
+  .stage { flex: 1; padding: 40px 64px 0; }
+  .step { display: none; }
+  .step.active { display: block; }
+
+  .mark { width: 13px; height: 13px; background: var(--accent); margin-bottom: 30px; }
+  .kicker {
+    font-size: 11px; letter-spacing: 0.18em; font-weight: 700;
+    color: var(--muted); margin-bottom: 16px;
+  }
+  h1 {
+    font-family: var(--font-heading); font-weight: 700; font-size: 56px;
+    letter-spacing: -0.03em; margin: 0; line-height: 1.05;
+  }
+  .subhead {
+    font-family: var(--font-heading); font-weight: 700; font-size: 26px;
+    color: var(--muted); margin-top: 6px; letter-spacing: -0.01em;
+  }
+  .rule { width: 420px; height: 1px; background: var(--divider); margin: 30px 0 26px; }
+  .body-copy { font-size: 14px; line-height: 1.65; max-width: 460px; color: var(--text); }
+  .body-copy strong { font-weight: 700; }
+
+  .btn {
+    font-family: var(--font-heading); font-weight: 700; font-size: 13px;
+    cursor: pointer; border: 1px solid var(--divider); background: none;
+    color: var(--text); padding: 11px 20px;
+  }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .cta { margin-top: 34px; }
+
+  .keyrow { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  input[type="text"], input[type="password"] {
+    width: 340px; font-size: 13px; padding: 11px 13px; background: var(--surface);
+    color: var(--text); border: 1px solid var(--divider); font-family: var(--font-body);
+  }
+  input.invalid { border-color: var(--accent); }
+  .icon-btn { padding: 11px 12px; }
+
+  .error {
+    display: none; align-items: center; gap: 7px; margin-top: 12px;
+    font-size: 12px; color: var(--accent);
+  }
+  .error.shown { display: flex; }
+  .getkey { margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .getkey a { color: var(--accent); font-weight: 700; }
+
+  .footer {
+    height: 46px; flex: none;
+    border-top: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 64px; font-size: 12px; color: var(--muted);
+  }
+  .dots { display: flex; gap: 7px; }
+  .dot { width: 17px; height: 3px; background: var(--divider); }
+  .dot.on { background: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="titlebar" data-tauri-drag-region>
+    <button class="winbtn" id="close" title="Close">
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M1.5 1.5l9 9M10.5 1.5l-9 9"/></svg>
+    </button>
+  </div>
+
+  <div class="stage">
+    <section class="step active" id="step1">
+      <div class="mark"></div>
+      <h1>WhisperOSS</h1>
+      <div class="subhead">Speak anywhere.</div>
+      <div class="rule"></div>
+      <div class="body-copy">
+        Hold <strong>Ctrl + Win</strong> in any app, say what you mean, and release.
+        Your words are typed straight into whatever had the cursor.
+      </div>
+      <button class="btn btn-primary cta" id="get-started">Get started</button>
+    </section>
+
+    <section class="step" id="step2">
+      <div class="kicker">CONNECT GROQ</div>
+      <h1>Add your API key</h1>
+      <div class="body-copy" style="margin-top:14px">
+        Transcription runs on Groq. The key stays on this PC and is used for
+        nothing else.
+      </div>
+      <div class="rule"></div>
+      <div class="keyrow">
+        <input type="password" id="api-key" placeholder="gsk_…" />
+        <button class="btn icon-btn" id="toggle-key" title="Show key">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>
+        </button>
+        <button class="btn btn-primary" id="validate">Validate &amp; finish</button>
+      </div>
+      <div class="error" id="key-error">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 16H3z"/><path d="M12 9v5"/><path d="M12 17h.01"/></svg>
+        <span id="key-error-text"></span>
+      </div>
+      <div class="getkey">Get one at <a href="#" id="groq-link">console.groq.com/keys</a></div>
+    </section>
+  </div>
+
+  <div class="footer">
+    <div class="dots">
+      <div class="dot on" id="dot1"></div>
+      <div class="dot" id="dot2"></div>
+    </div>
+    <div id="stepcount">Step 1 of 2</div>
+  </div>
+
+  <script src="firstrun.js"></script>
+</body>
+</html>
