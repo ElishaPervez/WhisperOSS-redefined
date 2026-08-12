@@ -189,8 +189,9 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                                 ui.fade_out_and_hide(my_gen);
                             }
                             Ok(text) => {
-                                let final_text = if wants_formatting(use_formatter, casual) {
-                                    match client.format_text(&text, casual) {
+                                let final_text = match formatting_mode(use_formatter, casual) {
+                                    Formatting::Casual => crate::casualize::casualize(&text),
+                                    Formatting::Ai => match client.format_text(&text) {
                                         Ok(f) if !f.is_empty() => f,
                                         Ok(_) => text.clone(),
                                         Err(e) => {
@@ -200,9 +201,8 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                                             ));
                                             text.clone()
                                         }
-                                    }
-                                } else {
-                                    text.clone()
+                                    },
+                                    Formatting::Raw => text.clone(),
                                 };
                                 if paste(&final_text) {
                                     ui.emit(my_gen, "success", "");
@@ -241,11 +241,23 @@ fn on_fallback_device(wanted: &Option<String>, active: &Option<String>) -> bool 
     }
 }
 
-/// The AI rewrite runs when EITHER toggle is on. Casual is its own trigger,
-/// not a sub-option of formatting; when casual is on, format_text picks the
-/// casual prompt (so casual wins if both are on).
-fn wants_formatting(use_formatter: bool, casual: bool) -> bool {
-    use_formatter || casual
+enum Formatting {
+    Raw,
+    Casual,
+    Ai,
+}
+
+/// Casual mode is a local rewrite and always wins: it exists for latency,
+/// so it must never trigger the AI pass even when the formatter toggle is
+/// also on. The AI cleanup pass only runs for formal formatting.
+fn formatting_mode(use_formatter: bool, casual: bool) -> Formatting {
+    if casual {
+        Formatting::Casual
+    } else if use_formatter {
+        Formatting::Ai
+    } else {
+        Formatting::Raw
+    }
 }
 
 /// Privacy paste. Returns true only if the text was staged with the privacy
@@ -274,15 +286,19 @@ fn paste(text: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::wants_formatting;
+    use super::{formatting_mode, Formatting};
     use super::on_fallback_device;
 
     #[test]
     fn formatting_truth_table() {
-        assert!(!wants_formatting(false, false)); // neither → raw
-        assert!(wants_formatting(true, false));   // formal only
-        assert!(wants_formatting(false, true));   // casual only → still formats
-        assert!(wants_formatting(true, true));    // both → formats (casual wins in format_text)
+        // neither → raw transcript, no AI call
+        assert!(matches!(formatting_mode(false, false), Formatting::Raw));
+        // formal only → AI cleanup pass
+        assert!(matches!(formatting_mode(true, false), Formatting::Ai));
+        // casual only → local pass, no AI call
+        assert!(matches!(formatting_mode(false, true), Formatting::Casual));
+        // both on → casual wins, and it stays local (latency is the point)
+        assert!(matches!(formatting_mode(true, true), Formatting::Casual));
     }
 
     #[test]

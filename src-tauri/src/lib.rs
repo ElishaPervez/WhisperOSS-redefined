@@ -1,6 +1,7 @@
 mod applog;
 mod audio;
 mod autostart;
+mod casualize;
 mod clipboard;
 mod commands;
 mod config;

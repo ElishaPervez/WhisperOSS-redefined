@@ -78,11 +78,13 @@ impl GroqClient {
         }
     }
 
-    /// Optional cleanup pass (spec §2). Same retry discipline as transcribe.
-    pub fn format_text(&self, text: &str, casual: bool) -> Result<String, GroqError> {
+    /// Optional formal cleanup pass (spec §2). Same retry discipline as
+    /// transcribe. Casual mode never comes here — it is a local rewrite
+    /// (see casualize.rs).
+    pub fn format_text(&self, text: &str) -> Result<String, GroqError> {
         let mut last = None;
         for _ in 0..2 {
-            match self.format_attempt(text, casual) {
+            match self.format_attempt(text) {
                 Ok(t) => return Ok(t),
                 Err(GroqError::Unauthorized) => return Err(GroqError::Unauthorized),
                 Err(e) => last = Some(e),
@@ -91,12 +93,8 @@ impl GroqClient {
         Err(last.expect("at least one attempt ran"))
     }
 
-    fn format_attempt(&self, text: &str, casual: bool) -> Result<String, GroqError> {
-        let prompt = if casual {
-            crate::prompts::CASUAL_PROMPT
-        } else {
-            crate::prompts::FORMAT_PROMPT
-        };
+    fn format_attempt(&self, text: &str) -> Result<String, GroqError> {
+        let prompt = crate::prompts::FORMAT_PROMPT;
         let body = serde_json::json!({
             "model": FORMAT_MODEL,
             "temperature": 0.3,
@@ -267,13 +265,13 @@ mod tests {
             "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\nconnection: close\r\n\r\n{\"choices\":[{\"message\":{\"content\":\" Hello, world. \"}}]}",
         );
         let c = client(base);
-        assert_eq!(c.format_text("hello world", false).unwrap(), "Hello, world.");
+        assert_eq!(c.format_text("hello world").unwrap(), "Hello, world.");
     }
 
     #[test]
     fn format_text_unauthorized_maps() {
         let base = serve_once("HTTP/1.1 401 Unauthorized\r\nconnection: close\r\n\r\n{}");
-        assert!(matches!(client(base).format_text("x", true),
+        assert!(matches!(client(base).format_text("x"),
                          Err(GroqError::Unauthorized)));
     }
 
