@@ -51,6 +51,7 @@ cargo test
 | Transcription provider | Chooses Google Gemini Live or Groq Whisper; there is no automatic fallback |
 | Provider API key | Stored separately for Google and Groq on this PC |
 | Transcription model | Stored separately for each provider |
+| Live preview | Streams real-time speech preview into the overlay (Gemini Live) |
 | AI formatting | Cleans punctuation and paragraph breaks |
 | Casual mode | Lowercase, light emoji |
 | Microphone | Input device used while dictating |
