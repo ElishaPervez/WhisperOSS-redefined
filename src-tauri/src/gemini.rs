@@ -289,6 +289,12 @@ fn handle_command(
             Some(utterance) if !utterance.end_requested => {
                 utterance.end_requested = true;
                 utterance.result = Some(result);
+                // Append synthetic trailing silence (200 ms at 16 kHz = 3200 samples)
+                // so Gemini Live streaming ASR decoder has lookahead acoustic context
+                // to finalize trailing phonemes and avoid clipping the last word.
+                if !utterance.pcm.is_empty() {
+                    utterance.pcm.extend(vec![0i16; 3200]);
+                }
             }
             _ => {
                 let _ = result.send(Err(GeminiError::Network(

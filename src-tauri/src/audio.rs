@@ -1,5 +1,5 @@
 //! Always-on microphone capture (spec §4). The stream never stops: it feeds
-//! a 0.5 s pre-roll ring so recording start is instant and the first word
+//! a configurable pre-roll ring so recording start is instant and the first word
 //! is never clipped. Mono i16 at the device's native rate; downsampling to
 //! 16 kHz happens at upload time (dsp.rs). The device is swappable at runtime
 //! (M3c) — see switch_device.
@@ -34,8 +34,6 @@ fn pick_device(preferred: &Option<String>) -> Option<cpal::Device> {
     }
     host.default_input_device()
 }
-
-const PRE_ROLL_SECS: f64 = 0.5;
 
 pub trait AudioStreamSink: Send + Sync {
     fn push(&self, samples: Vec<i16>, source_rate: u32);
@@ -73,6 +71,7 @@ pub struct AudioEngine {
     ring: Mutex<VecDeque<i16>>,
     recording: Mutex<Option<RecordingBuffer>>,
     rate: AtomicU32,
+    preroll_ms: AtomicU32,
     peak: AtomicU16,
     healthy: AtomicBool,
     /// The device the running stream actually opened — not necessarily the
@@ -88,7 +87,11 @@ pub struct AudioEngine {
 }
 
 impl AudioEngine {
-    pub fn start(app: tauri::AppHandle, preferred: Option<String>) -> Arc<AudioEngine> {
+    pub fn start(
+        app: tauri::AppHandle,
+        preferred: Option<String>,
+        preroll_ms: u32,
+    ) -> Arc<AudioEngine> {
         let app_for_engine = app.clone();
         let (device_tx, device_rx) = channel::<Option<String>>();
         let engine = Arc::new(AudioEngine {
@@ -96,6 +99,7 @@ impl AudioEngine {
             ring: Mutex::new(VecDeque::new()),
             recording: Mutex::new(None),
             rate: AtomicU32::new(16_000),
+            preroll_ms: AtomicU32::new(preroll_ms),
             peak: AtomicU16::new(0),
             healthy: AtomicBool::new(false),
             active_device: Mutex::new(None),
@@ -166,6 +170,16 @@ impl AudioEngine {
         });
 
         engine
+    }
+
+    pub fn set_preroll_ms(&self, ms: u32) {
+        self.preroll_ms.store(ms, Ordering::SeqCst);
+        let rate = self.rate.load(Ordering::SeqCst);
+        let ring_cap = preroll_samples(ms, rate);
+        let mut ring = self.ring.lock().unwrap();
+        while ring.len() > ring_cap {
+            ring.pop_front();
+        }
     }
 
     pub fn is_healthy(&self) -> bool {
@@ -240,22 +254,33 @@ impl AudioEngine {
         (samples, self.rate.load(Ordering::SeqCst))
     }
 
-    fn ingest(&self, mono: &[i16], ring_cap: usize) {
+    fn ingest(&self, mono: &[i16]) {
+        let preroll_ms = self.preroll_ms.load(Ordering::SeqCst);
+        let rate = self.rate.load(Ordering::SeqCst);
+        let ring_cap = preroll_samples(preroll_ms, rate);
         {
             let mut ring = self.ring.lock().unwrap();
-            for &s in mono {
-                if ring.len() == ring_cap {
-                    ring.pop_front();
+            if ring_cap == 0 {
+                ring.clear();
+            } else {
+                for &s in mono {
+                    if ring.len() >= ring_cap {
+                        ring.pop_front();
+                    }
+                    ring.push_back(s);
                 }
-                ring.push_back(s);
             }
         }
         if let Some(recording) = self.recording.lock().unwrap().as_mut() {
-            recording.append(mono, self.rate.load(Ordering::SeqCst));
+            recording.append(mono, rate);
         }
         let peak = mono.iter().map(|s| s.unsigned_abs()).max().unwrap_or(0);
         self.peak.fetch_max(peak, Ordering::SeqCst);
     }
+}
+
+pub fn preroll_samples(preroll_ms: u32, rate: u32) -> usize {
+    (rate as f64 * (preroll_ms as f64 / 1000.0)).round() as usize
 }
 
 /// What the two-second tick should do about getting back to the device the
@@ -387,7 +412,6 @@ fn build_stream(
     let rate = config.sample_rate().0;
     let channels = config.channels() as usize;
     engine.rate.store(rate, Ordering::SeqCst);
-    let ring_cap = (rate as f64 * PRE_ROLL_SECS) as usize;
 
     let e = engine.clone();
     // A device that dies mid-stream must stop counting as healthy, or the
@@ -411,7 +435,7 @@ fn build_stream(
                             (avg.clamp(-1.0, 1.0) * 32_767.0) as i16
                         })
                         .collect();
-                    e.ingest(&mono, ring_cap);
+                    e.ingest(&mono);
                 },
                 err_fn,
                 None,
@@ -428,7 +452,7 @@ fn build_stream(
                                 / frame.len() as i32) as i16
                         })
                         .collect();
-                    e.ingest(&mono, ring_cap);
+                    e.ingest(&mono);
                 },
                 err_fn,
                 None,
@@ -488,5 +512,18 @@ mod tests {
         assert_eq!(reclaim_step(usb, nvidia, true, true, None), Stay);
         // listed but it refused to open last time: do not churn every two seconds
         assert_eq!(reclaim_step(usb, nvidia, false, true, usb), Stay);
+    }
+
+    #[test]
+    fn preroll_samples_calculation() {
+        use super::preroll_samples;
+        // 500ms at 16kHz
+        assert_eq!(preroll_samples(500, 16_000), 8_000);
+        // 250ms at 16kHz
+        assert_eq!(preroll_samples(250, 16_000), 4_000);
+        // 0ms at 16kHz
+        assert_eq!(preroll_samples(0, 16_000), 0);
+        // 100ms at 48kHz
+        assert_eq!(preroll_samples(100, 48_000), 4_800);
     }
 }

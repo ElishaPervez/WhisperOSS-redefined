@@ -112,6 +112,23 @@ pub fn set_show_live_transcript(state: State<AppState>, value: bool) {
 }
 
 #[tauri::command]
+pub fn set_preroll_ms(state: State<AppState>, value: u32) {
+    let value = value.clamp(0, 2000);
+    state.config.lock().unwrap().preroll_ms = value;
+    persist(&state);
+    state.audio.set_preroll_ms(value);
+    applog::log("setting-preroll-ms-changed");
+}
+
+#[tauri::command]
+pub fn set_postroll_ms(state: State<AppState>, value: u32) {
+    let value = value.clamp(0, 2000);
+    state.config.lock().unwrap().postroll_ms = value;
+    persist(&state);
+    applog::log("setting-postroll-ms-changed");
+}
+
+#[tauri::command]
 pub fn set_theme(state: State<AppState>, value: String) {
     state.config.lock().unwrap().theme = normalize_theme(&value);
     persist(&state);
@@ -305,6 +322,13 @@ mod tests {
         );
         assert_eq!(sanitized_model(" ../bad?key=x ", "fallback"), "fallback");
         assert_eq!(sanitized_model("", "fallback"), "fallback");
+    }
+
+    #[test]
+    fn preroll_and_postroll_clamping() {
+        assert_eq!(500u32.clamp(0, 2000), 500);
+        assert_eq!(2500u32.clamp(0, 2000), 2000);
+        assert_eq!(0u32.clamp(0, 2000), 0);
     }
 }
 

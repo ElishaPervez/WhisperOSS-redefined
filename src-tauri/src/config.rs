@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_GROQ_MODEL: &str = "whisper-large-v3-turbo";
 pub const DEFAULT_GEMINI_MODEL: &str = "gemini-3.5-transcribe-live";
+pub const DEFAULT_PREROLL_MS: u32 = 500;
+pub const DEFAULT_POSTROLL_MS: u32 = 250;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -47,6 +49,10 @@ pub struct Config {
     pub gemini_model: String,
     /// Shows interim transcribed text on the overlay pill while speaking (Google).
     pub show_live_transcript: bool,
+    /// Audio buffer in ms captured before hotkey press (eliminates first-word clipping).
+    pub preroll_ms: u32,
+    /// Audio buffer in ms captured after hotkey release (eliminates last-word clipping).
+    pub postroll_ms: u32,
 }
 
 impl Default for Config {
@@ -63,6 +69,8 @@ impl Default for Config {
             groq_model: DEFAULT_GROQ_MODEL.into(),
             gemini_model: DEFAULT_GEMINI_MODEL.into(),
             show_live_transcript: true,
+            preroll_ms: DEFAULT_PREROLL_MS,
+            postroll_ms: DEFAULT_POSTROLL_MS,
         }
     }
 }
@@ -118,6 +126,8 @@ mod tests {
         assert_eq!(c.gemini_model, DEFAULT_GEMINI_MODEL);
         assert_eq!(c.gemini_model, "gemini-3.5-transcribe-live");
         assert!(c.show_live_transcript);
+        assert_eq!(c.preroll_ms, DEFAULT_PREROLL_MS);
+        assert_eq!(c.postroll_ms, DEFAULT_POSTROLL_MS);
     }
 
     #[test]
@@ -130,6 +140,8 @@ mod tests {
         assert_eq!(c.transcription_provider, TranscriptionProvider::Groq);
         assert_eq!(c.gemini_model, DEFAULT_GEMINI_MODEL);
         assert!(c.show_live_transcript);
+        assert_eq!(c.preroll_ms, DEFAULT_PREROLL_MS);
+        assert_eq!(c.postroll_ms, DEFAULT_POSTROLL_MS);
     }
 
     #[test]
@@ -149,6 +161,8 @@ mod tests {
 
         assert_eq!(c.gemini_model, "gemini-3.5-transcribe-live");
         assert!(c.show_live_transcript);
+        assert_eq!(c.preroll_ms, DEFAULT_PREROLL_MS);
+        assert_eq!(c.postroll_ms, DEFAULT_POSTROLL_MS);
     }
 
     #[test]
@@ -160,6 +174,8 @@ mod tests {
         c.transcription_provider = TranscriptionProvider::Gemini;
         c.gemini_model = "gemini-test-model".into();
         c.show_live_transcript = false;
+        c.preroll_ms = 400;
+        c.postroll_ms = 300;
         assert_eq!(from_json(&to_json(&c)), c);
     }
 }

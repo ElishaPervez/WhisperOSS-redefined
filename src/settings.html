@@ -52,9 +52,17 @@
   .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
 
   .divider { height: 2px; background: var(--divider); flex: none; }
-  .rows { flex: 1; display: flex; flex-direction: column; padding: 0 48px; }
+  .rows {
+    flex: 1; display: flex; flex-direction: column; padding: 0 48px;
+    overflow-y: auto;
+  }
+  .rows::-webkit-scrollbar { width: 6px; }
+  .rows::-webkit-scrollbar-thumb { background: var(--divider); }
   .row {
-    flex: 1; display: flex; align-items: center; justify-content: space-between;
+    flex: 0 0 auto;
+    min-height: 52px;
+    padding: 8px 0;
+    display: flex; align-items: center; justify-content: space-between;
     gap: 24px;
   }
   .row + .row { border-top: 1px solid color-mix(in srgb, var(--text) 14%, transparent); }
@@ -65,6 +73,13 @@
   input[type="text"], input[type="password"] {
     width: 232px; font-size: 13px; padding: 9px 12px; background: var(--surface);
     color: var(--text); border: 1px solid var(--divider); font-family: var(--font-body);
+  }
+  input[type="range"] {
+    width: 140px; accent-color: var(--accent); cursor: pointer;
+  }
+  .range-val {
+    min-width: 60px; text-align: right; font-family: var(--font-heading);
+    font-weight: 700; font-size: 13px; color: var(--text);
   }
   .icon-btn { padding: 9px 10px; }
 
@@ -217,6 +232,28 @@
         <div class="desc">Input device used while dictating <span class="micnote" id="mic-note"></span></div>
       </div>
       <select class="mic" id="mic"></select>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label">Pre-roll buffer</div>
+        <div class="desc">Audio captured before key press to prevent first-word clipping</div>
+      </div>
+      <div class="ctl">
+        <input type="range" id="preroll" min="0" max="2000" step="50" value="500" />
+        <span class="range-val" id="preroll-val">500 ms</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label">Post-roll buffer</div>
+        <div class="desc">Audio captured after key release to prevent last-word clipping</div>
+      </div>
+      <div class="ctl">
+        <input type="range" id="postroll" min="0" max="2000" step="50" value="250" />
+        <span class="range-val" id="postroll-val">250 ms</span>
+      </div>
     </div>
 
     <div class="row">

@@ -250,46 +250,59 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                     applog::log("recording-cancel-short-tap");
                 }
                 hotkey_logic::Action::Finish { held_ms } => {
-                    let (samples, rate) = audio.stop_recording();
                     let Some(capture) = active_capture.take() else {
                         applog::log("recording-finish-without-active-capture");
                         continue;
                     };
-                    applog::log(&format!(
-                        "recording-finish held_ms={held_ms} samples={}",
-                        samples.len()
-                    ));
+                    let postroll_ms = state.config.lock().unwrap().postroll_ms;
                     let my_gen = generation.load(Ordering::SeqCst);
                     let ui = Ui {
                         app: app.clone(),
                         generation: generation.clone(),
                     };
 
-                    if dsp::is_effectively_silent(&samples) {
-                        if capture.provider == config::TranscriptionProvider::Gemini {
-                            gemini_live.cancel();
-                        }
-                        let wanted = state.config.lock().unwrap().input_device.clone();
-                        if on_fallback_device(&wanted, &audio.active_device()) {
-                            applog::log("silent-on-fallback-device");
-                            std::thread::spawn(move || ui.show_error(my_gen, "Check your mic"));
-                        } else {
-                            applog::log("silent-discarded");
-                            std::thread::spawn(move || ui.fade_out_and_hide(my_gen));
-                        }
-                        continue;
-                    }
-
                     ui.show(my_gen, position::PILL_LOGICAL_W);
                     ui.emit(my_gen, "processing", "");
-                    let wav =
-                        (capture.provider == config::TranscriptionProvider::Groq).then(|| {
-                            dsp::encode_wav_mono16(&dsp::resample_to_16k(&samples, rate), 16_000)
-                        });
-                    let live_result = (capture.provider == config::TranscriptionProvider::Gemini)
-                        .then(|| gemini_live.finish());
+
+                    let audio = audio.clone();
+                    let gemini_live = gemini_live.clone();
                     let state = state.clone();
                     std::thread::spawn(move || {
+                        if postroll_ms > 0 {
+                            std::thread::sleep(Duration::from_millis(postroll_ms as u64));
+                        }
+                        if !ui.current(my_gen) {
+                            applog::log("recording-finish-stale-after-postroll");
+                            return;
+                        }
+                        let (samples, rate) = audio.stop_recording();
+                        applog::log(&format!(
+                            "recording-finish held_ms={held_ms} samples={}",
+                            samples.len()
+                        ));
+
+                        if dsp::is_effectively_silent(&samples) {
+                            if capture.provider == config::TranscriptionProvider::Gemini {
+                                gemini_live.cancel();
+                            }
+                            let wanted = state.config.lock().unwrap().input_device.clone();
+                            if on_fallback_device(&wanted, &audio.active_device()) {
+                                applog::log("silent-on-fallback-device");
+                                ui.show_error(my_gen, "Check your mic");
+                            } else {
+                                applog::log("silent-discarded");
+                                ui.fade_out_and_hide(my_gen);
+                            }
+                            return;
+                        }
+
+                        let wav =
+                            (capture.provider == config::TranscriptionProvider::Groq).then(|| {
+                                dsp::encode_wav_mono16(&dsp::resample_to_16k(&samples, rate), 16_000)
+                            });
+                        let live_result = (capture.provider == config::TranscriptionProvider::Gemini)
+                            .then(|| gemini_live.finish());
+
                         enum ProviderFailure {
                             Groq(groq::GroqError),
                             Gemini(gemini::GeminiError),

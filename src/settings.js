@@ -186,6 +186,13 @@ async function load() {
   renderCombo(cfg.hotkey);
   await refreshMic();
 
+  const preroll = cfg.preroll_ms ?? 500;
+  el("preroll").value = preroll;
+  el("preroll-val").textContent = `${preroll} ms`;
+
+  const postroll = cfg.postroll_ms ?? 250;
+  el("postroll").value = postroll;
+  el("postroll-val").textContent = `${postroll} ms`;
 }
 
 function setKeyFeedback(text, kind) {
@@ -277,6 +284,25 @@ el("mic").onchange = async () => {
   const value = el("mic").value;
   await invoke("set_microphone", { value: value || null });
   el("status-text").textContent = "Microphone updated";
+};
+
+// --- pre-roll & post-roll ---
+el("preroll").oninput = () => {
+  el("preroll-val").textContent = `${el("preroll").value} ms`;
+};
+el("preroll").onchange = async () => {
+  const value = parseInt(el("preroll").value, 10);
+  await invoke("set_preroll_ms", { value });
+  el("status-text").textContent = "Pre-roll buffer updated";
+};
+
+el("postroll").oninput = () => {
+  el("postroll-val").textContent = `${el("postroll").value} ms`;
+};
+el("postroll").onchange = async () => {
+  const value = parseInt(el("postroll").value, 10);
+  await invoke("set_postroll_ms", { value });
+  el("status-text").textContent = "Post-roll buffer updated";
 };
 
 // The window is hidden rather than destroyed when closed, so the webview is

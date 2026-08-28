@@ -42,6 +42,8 @@ pub fn run() {
             commands::set_formatter,
             commands::set_casual,
             commands::set_show_live_transcript,
+            commands::set_preroll_ms,
+            commands::set_postroll_ms,
             commands::set_theme,
             commands::set_vocabulary,
             commands::set_autostart,
@@ -106,8 +108,11 @@ pub fn run() {
 
             let groq_key = keys::load(keys::Provider::Groq).unwrap_or_default();
             let gemini_key = keys::load(keys::Provider::Gemini).unwrap_or_default();
-            let audio_engine =
-                audio::AudioEngine::start(app.handle().clone(), cfg.input_device.clone());
+            let audio_engine = audio::AudioEngine::start(
+                app.handle().clone(),
+                cfg.input_device.clone(),
+                cfg.preroll_ms,
+            );
             let gemini_live =
                 gemini::GeminiLive::spawn(gemini::PROD_WS_URL.to_string(), pipeline::REQUEST_TIMEOUT);
             let app_state = state::AppState::new(
