@@ -1,6 +1,6 @@
 [package]
 name = "whispeross"
-version = "0.3.0"
+version = "0.4.0"
 description = "Hold Ctrl+Win, speak, release. Your words are typed wherever the cursor is."
 authors = ["Elisha Pervez"]
 edition = "2021"

@@ -5,7 +5,7 @@ Dictation for Windows. Hold Ctrl+Win in any app, speak, and release. Your words 
 ## How it works
 
 - Hold Ctrl+Win and a small pill appears at the bottom of the screen with live audio bars.
-- Speak, then release. The recording is sent to the provider selected in Settings and pasted at your cursor. Google uses the completed-audio Gemini 3.5 Transcribe model, so text appears after release rather than while you speak.
+- Speak, then release. The recording is transcribed by the provider selected in Settings and pasted at your cursor. When using Google Gemini Live, live text preview streams directly into the overlay as you speak.
 - Optional AI formatting cleans punctuation and paragraph breaks. Casual mode gives lowercase with light emoji.
 
 ## Privacy
@@ -24,7 +24,7 @@ Dictation for Windows. Hold Ctrl+Win in any app, speak, and release. Your words 
 ## Install
 
 Download the installer from the [releases page](https://github.com/ElishaPervez/WhisperOSS-redefined/releases) and run it. No admin rights needed. On first run the app asks for a Groq API key, which you can create at [console.groq.com/keys](https://console.groq.com/keys).
-You can switch to Google Gemini 3.5 Transcribe and save a Google AI Studio key in Settings.
+You can switch to Google Gemini Live and save a Google AI Studio key in Settings.
 
 ## Build from source
 
@@ -48,7 +48,7 @@ cargo test
 
 | Setting | What it does |
 | --- | --- |
-| Transcription provider | Chooses Google Gemini 3.5 Transcribe or Groq Whisper; there is no automatic fallback |
+| Transcription provider | Chooses Google Gemini Live or Groq Whisper; there is no automatic fallback |
 | Provider API key | Stored separately for Google and Groq on this PC |
 | Transcription model | Stored separately for each provider |
 | AI formatting | Cleans punctuation and paragraph breaks |
