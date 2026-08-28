@@ -106,12 +106,11 @@ struct Utterance {
     resampler: crate::dsp::StreamingResampler,
     pcm: Vec<i16>,
     sent_samples: usize,
+    start_sent: bool,
     end_requested: bool,
     end_sent: bool,
     end_sent_at: Option<Instant>,
     completion_seen_at: Option<Instant>,
-    server_turn_completed: bool,
-    final_after_end: bool,
     cancelled: bool,
     retry_count: usize,
     transcript: TranscriptBuffer,
@@ -127,12 +126,11 @@ impl Utterance {
             resampler: crate::dsp::StreamingResampler::new(),
             pcm: Vec::new(),
             sent_samples: 0,
+            start_sent: false,
             end_requested: false,
             end_sent: false,
             end_sent_at: None,
             completion_seen_at: None,
-            server_turn_completed: false,
-            final_after_end: false,
             cancelled: false,
             retry_count: 0,
             transcript: TranscriptBuffer::default(),
@@ -272,7 +270,10 @@ async fn pump_front(
     loop {
         let message = {
             let front = queue.front_mut().expect("front exists");
-            if front.sent_samples + LIVE_FRAME_SAMPLES <= front.pcm.len() {
+            if !front.start_sent {
+                front.start_sent = true;
+                Some(activity_start_message())
+            } else if front.sent_samples + LIVE_FRAME_SAMPLES <= front.pcm.len() {
                 let end = front.sent_samples + LIVE_FRAME_SAMPLES;
                 let message = audio_message(&front.pcm[front.sent_samples..end]);
                 front.sent_samples = end;
@@ -285,13 +286,8 @@ async fn pump_front(
                 } else {
                     front.end_sent = true;
                     front.end_sent_at = Some(Instant::now());
-                    front.completion_seen_at = if front.server_turn_completed {
-                        Some(Instant::now())
-                    } else {
-                        None
-                    };
-                    front.final_after_end = false;
-                    Some(audio_stream_end_message())
+                    front.completion_seen_at = None;
+                    Some(activity_end_message())
                 }
             } else {
                 None
@@ -388,9 +384,6 @@ fn handle_server_message(
                     return;
                 }
             };
-            let final_received = value["serverContent"]["inputTranscription"]["text"]
-                .as_str()
-                .is_some_and(|text| !text.trim().is_empty());
             let mut completed_text = None;
             let signal = if let Some(front) = queue.front_mut() {
                 let signal = front.transcript.ingest(&value);
@@ -400,20 +393,15 @@ fn handle_server_message(
                         let _ = tx.send(current_text);
                     }
                 }
-                if front.end_sent && final_received {
-                    front.final_after_end = true;
-                }
                 match signal {
                     ServerSignal::TurnComplete => {
-                        front.server_turn_completed = true;
                         if front.end_sent {
                             completed_text = Some(front.transcript.text());
                         }
                     }
                     ServerSignal::GenerationComplete => {
-                        front.server_turn_completed = true;
                         if front.end_sent {
-                            if front.final_after_end {
+                            if !front.transcript.text().is_empty() {
                                 completed_text = Some(front.transcript.text());
                             } else {
                                 front.completion_seen_at = Some(Instant::now());
@@ -421,15 +409,9 @@ fn handle_server_message(
                         }
                     }
                     ServerSignal::Continue => {
-                        if value.get("serverContent")
-                            .and_then(|c| c.get("interimInputTranscription"))
-                            .is_some()
-                        {
-                            front.server_turn_completed = false;
-                        }
                         if front.end_sent
-                            && final_received
                             && front.completion_seen_at.is_some()
+                            && !front.transcript.text().is_empty()
                         {
                             completed_text = Some(front.transcript.text());
                         }
@@ -466,11 +448,10 @@ fn recover_or_complete(
     if front.retry_count == 0 && !matches!(error, GeminiError::Unauthorized) {
         front.retry_count += 1;
         front.sent_samples = 0;
+        front.start_sent = false;
         front.end_sent = false;
         front.end_sent_at = None;
         front.completion_seen_at = None;
-        front.server_turn_completed = false;
-        front.final_after_end = false;
         front.transcript = TranscriptBuffer::default();
     } else {
         complete_front(queue, Err(error));
@@ -535,6 +516,19 @@ fn setup_message(model: &str, vocabulary: &[String], smart: bool) -> serde_json:
                 "responseModalities": ["TEXT"],
             },
             "inputAudioTranscription": transcription,
+            "realtimeInputConfig": {
+                "automaticActivityDetection": {
+                    "disabled": true,
+                }
+            }
+        }
+    })
+}
+
+fn activity_start_message() -> serde_json::Value {
+    serde_json::json!({
+        "realtimeInput": {
+            "activityStart": {}
         }
     })
 }
@@ -545,7 +539,7 @@ fn audio_message(samples: &[i16]) -> serde_json::Value {
         pcm.extend_from_slice(&sample.to_le_bytes());
     }
     serde_json::json!({
-        "realtime_input": {
+        "realtimeInput": {
             "audio": {
                 "data": base64::engine::general_purpose::URL_SAFE.encode(pcm),
                 "mimeType": "audio/pcm;rate=16000",
@@ -554,8 +548,12 @@ fn audio_message(samples: &[i16]) -> serde_json::Value {
     })
 }
 
-fn audio_stream_end_message() -> serde_json::Value {
-    serde_json::json!({ "realtime_input": { "audioStreamEnd": true } })
+fn activity_end_message() -> serde_json::Value {
+    serde_json::json!({
+        "realtimeInput": {
+            "activityEnd": {}
+        }
+    })
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -569,7 +567,7 @@ enum ServerSignal {
 
 #[derive(Default)]
 struct TranscriptBuffer {
-    finalized: Vec<String>,
+    finalized: String,
     interim: String,
 }
 
@@ -589,8 +587,8 @@ impl TranscriptBuffer {
         }
         if let Some(text) = content["inputTranscription"]["text"].as_str() {
             let text = text.trim();
-            if !text.is_empty() && !self.finalized.iter().any(|part| part == text) {
-                self.finalized.push(text.to_string());
+            if !text.is_empty() {
+                self.finalized = text.to_string();
             }
             self.interim.clear();
         }
@@ -604,12 +602,11 @@ impl TranscriptBuffer {
     }
 
     fn text(&self) -> String {
-        let mut parts = self.finalized.clone();
-        let interim = self.interim.trim();
-        if !interim.is_empty() && !parts.iter().any(|part| part == interim) {
-            parts.push(interim.to_string());
+        if !self.finalized.is_empty() {
+            self.finalized.clone()
+        } else {
+            self.interim.clone()
         }
-        parts.join(" ").trim().to_string()
     }
 }
 
@@ -710,6 +707,10 @@ mod tests {
             message["setup"]["inputAudioTranscription"]["customVocabulary"],
             serde_json::json!(["WhisperOSS", "Tauri"])
         );
+        assert_eq!(
+            message["setup"]["realtimeInputConfig"]["automaticActivityDetection"]["disabled"],
+            true
+        );
     }
 
     #[test]
@@ -720,6 +721,10 @@ mod tests {
             message["setup"]["inputAudioTranscription"],
             serde_json::json!({})
         );
+        assert_eq!(
+            message["setup"]["realtimeInputConfig"]["automaticActivityDetection"]["disabled"],
+            true
+        );
     }
 
     #[test]
@@ -727,35 +732,30 @@ mod tests {
         let message = audio_message(&[0, 1, -1]);
 
         assert_eq!(
-            message["realtime_input"]["audio"]["mimeType"],
+            message["realtimeInput"]["audio"]["mimeType"],
             "audio/pcm;rate=16000"
         );
-        assert_eq!(message["realtime_input"]["audio"]["data"], "AAABAP__");
+        assert_eq!(message["realtimeInput"]["audio"]["data"], "AAABAP__");
     }
 
     #[test]
-    fn finalized_phrases_accumulate_across_pauses() {
+    fn final_transcript_supersedes_interim_text() {
         let mut transcript = TranscriptBuffer::default();
         assert_eq!(
             transcript.ingest(&serde_json::json!({
-                "serverContent": { "interimInputTranscription": { "text": "first dra" } }
+                "serverContent": { "interimInputTranscription": { "text": "streaming phrase" } }
             })),
             ServerSignal::Continue
         );
-        transcript.ingest(&serde_json::json!({
-            "serverContent": { "inputTranscription": { "text": " first phrase " } }
-        }));
-        transcript.ingest(&serde_json::json!({
-            "serverContent": { "interimInputTranscription": { "text": "second phrase" } }
-        }));
+        assert_eq!(transcript.text(), "streaming phrase");
+
         transcript.ingest(&serde_json::json!({
             "serverContent": {
-                "inputTranscription": { "text": "second phrase" },
+                "inputTranscription": { "text": "finalized complete sentence" },
                 "turnComplete": true
             }
         }));
-
-        assert_eq!(transcript.text(), "first phrase second phrase");
+        assert_eq!(transcript.text(), "finalized complete sentence");
     }
 
     #[test]
@@ -814,18 +814,23 @@ mod tests {
 
             for (index, expected) in ["first result", "second result"].into_iter().enumerate() {
                 let mut audio_frames = 0;
+                let mut activity_started = false;
                 loop {
                     let value: serde_json::Value = serde_json::from_str(
                         websocket.read().unwrap().into_text().unwrap().as_str(),
                     )
                     .unwrap();
-                    if value["realtime_input"]["audio"].is_object() {
+                    if value["realtimeInput"]["activityStart"].is_object() {
+                        activity_started = true;
+                    }
+                    if value["realtimeInput"]["audio"].is_object() {
                         audio_frames += 1;
                     }
-                    if value["realtime_input"]["audioStreamEnd"].as_bool() == Some(true) {
+                    if value["realtimeInput"]["activityEnd"].is_object() {
                         break;
                     }
                 }
+                assert!(activity_started);
                 assert_eq!(audio_frames, 1);
                 if index == 0 {
                     websocket
@@ -902,6 +907,10 @@ mod tests {
                     r#"{"setupComplete":{}}"#.into(),
                 ))
                 .unwrap();
+            let first_val: serde_json::Value =
+                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
+                    .unwrap();
+            assert!(first_val["realtimeInput"]["activityStart"].is_object());
             let _ = websocket.read().unwrap();
             websocket
                 .send(tokio_tungstenite::tungstenite::Message::Text(
@@ -918,7 +927,7 @@ mod tests {
                 let value: serde_json::Value =
                     serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
                         .unwrap();
-                if value["realtime_input"]["audioStreamEnd"].as_bool() == Some(true) {
+                if value["realtimeInput"]["activityEnd"].is_object() {
                     break;
                 }
             }
@@ -982,7 +991,7 @@ mod tests {
                 let value: serde_json::Value =
                     serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
                         .unwrap();
-                if value["realtime_input"]["audioStreamEnd"].as_bool() == Some(true) {
+                if value["realtimeInput"]["activityEnd"].is_object() {
                     break;
                 }
             }
@@ -1069,7 +1078,7 @@ mod tests {
     }
 
     #[test]
-    fn live_manager_completes_when_turn_completed_during_speech_pause() {
+    fn live_manager_handles_speech_pauses_without_splitting_session() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
@@ -1081,12 +1090,28 @@ mod tests {
                     r#"{"setupComplete":{}}"#.into(),
                 ))
                 .unwrap();
+            let _ = websocket.read().unwrap(); // activityStart
             let _ = websocket.read().unwrap(); // first audio chunk
+            websocket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    r#"{"serverContent":{"interimInputTranscription":{"text":"speaking part one"}}}"#.into(),
+                ))
+                .unwrap();
+            // Server receives pause audio and subsequent speech until activityEnd
+            loop {
+                let msg = websocket.read().unwrap();
+                if let Ok(text) = msg.into_text() {
+                    let val: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+                    if val["realtimeInput"]["activityEnd"].is_object() {
+                        break;
+                    }
+                }
+            }
             websocket
                 .send(tokio_tungstenite::tungstenite::Message::Text(
                     serde_json::json!({
                         "serverContent": {
-                            "inputTranscription": { "text": "early finished text" },
+                            "inputTranscription": { "text": "speaking part one and then continuing seamlessly" },
                             "turnComplete": true
                         }
                     })
@@ -1094,17 +1119,6 @@ mod tests {
                     .into(),
                 ))
                 .unwrap();
-            // Server receives trailing silence audio and audioStreamEnd, but sends nothing more
-            loop {
-                let msg = websocket.read().unwrap();
-                if let Ok(text) = msg.into_text() {
-                    let val: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
-                    if val["realtime_input"]["audioStreamEnd"].as_bool() == Some(true) {
-                        break;
-                    }
-                }
-            }
-            std::thread::sleep(Duration::from_millis(800));
         });
 
         let live = GeminiLive::spawn(format!("ws://{address}/"), Duration::from_secs(5));
@@ -1120,10 +1134,12 @@ mod tests {
             )
             .unwrap();
         sink.push(vec![700; 1_600], 16_000);
-        // Wait long enough for the server turnComplete to be processed while still recording
+        // Wait long enough for interim processing while still recording
         std::thread::sleep(Duration::from_millis(150));
-        // Push 2 more seconds of silence
+        // Push 2 more seconds of silence (pause)
         sink.push(vec![0; 1_600], 16_000);
+        // Push subsequent speech
+        sink.push(vec![700; 1_600], 16_000);
         // Release key (finish)
         let result = live
             .finish()
@@ -1132,7 +1148,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(result, "early finished text");
+        assert_eq!(result, "speaking part one and then continuing seamlessly");
         server.join().unwrap();
     }
 
@@ -1154,6 +1170,89 @@ mod tests {
             client(format!("http://{addr}")).validate_key(),
             Err(GeminiError::Unauthorized)
         ));
+    }
+
+    #[test]
+    fn live_manager_sends_activity_start_and_end_wrapping_speech() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (tcp, _) = listener.accept().unwrap();
+            let mut websocket = tokio_tungstenite::tungstenite::accept(tcp).unwrap();
+            let setup: serde_json::Value =
+                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
+                    .unwrap();
+            assert_eq!(
+                setup["setup"]["realtimeInputConfig"]["automaticActivityDetection"]["disabled"],
+                true
+            );
+            websocket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    r#"{"setupComplete":{}}"#.into(),
+                ))
+                .unwrap();
+
+            // 1. ActivityStart
+            let start_msg: serde_json::Value =
+                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
+                    .unwrap();
+            assert!(start_msg["realtimeInput"]["activityStart"].is_object());
+
+            // 2. Audio chunks
+            let audio_msg: serde_json::Value =
+                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
+                    .unwrap();
+            assert!(audio_msg["realtimeInput"]["audio"]["data"].is_string());
+
+            // 3. ActivityEnd
+            let end_msg: serde_json::Value =
+                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
+                    .unwrap();
+            assert!(end_msg["realtimeInput"]["activityEnd"].is_object());
+
+            // Respond with full finalized transcript
+            websocket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    serde_json::json!({
+                        "serverContent": {
+                            "inputTranscription": {
+                                "text": "Okay, I am now testing whether after I stop speaking and then I start speaking again it's going to be fixed."
+                            },
+                            "turnComplete": true
+                        }
+                    })
+                    .to_string()
+                    .into(),
+                ))
+                .unwrap();
+        });
+
+        let live = GeminiLive::spawn(format!("ws://{address}/"), Duration::from_secs(2));
+        let sink = live
+            .begin(
+                LiveConfig {
+                    key: "test-key".into(),
+                    model: "gemini-3.5-transcribe-live".into(),
+                    vocabulary: Vec::new(),
+                    smart: false,
+                },
+                None,
+            )
+            .unwrap();
+
+        sink.push(vec![700; 1_600], 16_000);
+        let result = live
+            .finish()
+            .unwrap()
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            result,
+            "Okay, I am now testing whether after I stop speaking and then I start speaking again it's going to be fixed."
+        );
+        server.join().unwrap();
     }
 
     /// Manual service-contract check. It is ignored during ordinary tests so

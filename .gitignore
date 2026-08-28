@@ -31,3 +31,7 @@ src-tauri/gen/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Documentation
+docs/
+
