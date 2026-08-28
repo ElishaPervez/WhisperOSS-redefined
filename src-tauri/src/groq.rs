@@ -5,7 +5,6 @@
 use std::time::Duration;
 
 pub const PROD_BASE_URL: &str = "https://api.groq.com";
-const MODEL: &str = "whisper-large-v3-turbo";
 const FORMAT_MODEL: &str = "openai/gpt-oss-120b";
 
 #[derive(Debug)]
@@ -19,15 +18,26 @@ pub struct GroqClient {
     http: reqwest::blocking::Client,
     base: String,
     key: String,
+    model: String,
 }
 
 impl GroqClient {
-    pub fn new(key: String, base_url: String, timeout: Duration) -> GroqClient {
+    pub fn new(key: String, model: String, base_url: String, timeout: Duration) -> GroqClient {
         let http = reqwest::blocking::Client::builder()
             .timeout(timeout)
+            // Never honor HTTP_PROXY/HTTPS_PROXY env vars: an ambient proxy
+            // (common on dev machines) would intercept every request and
+            // return 500, silently breaking dictation and the local test
+            // server. Groq is reached directly.
+            .no_proxy()
             .build()
             .expect("http client");
-        GroqClient { http, base: base_url, key }
+        GroqClient {
+            http,
+            base: base_url,
+            key,
+            model,
+        }
     }
 
     pub fn transcribe(&self, wav: Vec<u8>, vocab_prompt: &str) -> Result<String, GroqError> {
@@ -49,7 +59,7 @@ impl GroqClient {
             .map_err(|e| GroqError::Network(e.to_string()))?;
         let form = reqwest::blocking::multipart::Form::new()
             .part("file", part)
-            .text("model", MODEL)
+            .text("model", self.model.clone())
             .text("language", "en")
             .text("temperature", "0")
             .text("response_format", "json");
@@ -180,7 +190,12 @@ mod tests {
     }
 
     fn client(base: String) -> GroqClient {
-        GroqClient::new("test-key".into(), base, Duration::from_secs(2))
+        GroqClient::new(
+            "test-key".into(),
+            crate::config::DEFAULT_GROQ_MODEL.into(),
+            base,
+            Duration::from_secs(2),
+        )
     }
 
     #[test]
@@ -188,7 +203,10 @@ mod tests {
         let base = serve_once(
             "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\nconnection: close\r\n\r\n{\"text\": \" hello world \"}",
         );
-        assert_eq!(client(base).transcribe(vec![0u8; 16], "").unwrap(), "hello world");
+        assert_eq!(
+            client(base).transcribe(vec![0u8; 16], "").unwrap(),
+            "hello world"
+        );
     }
 
     #[test]
@@ -198,7 +216,10 @@ mod tests {
         );
         let prompt = "Codex, Claude, OpenAI, Anthropic, Fable";
 
-        assert_eq!(client(base).transcribe(vec![0u8; 16], prompt).unwrap(), "ok");
+        assert_eq!(
+            client(base).transcribe(vec![0u8; 16], prompt).unwrap(),
+            "ok"
+        );
         let request = request.recv_timeout(Duration::from_secs(2)).unwrap();
         let request = String::from_utf8_lossy(&request);
         assert!(request.contains(&format!("name=\"prompt\"\r\n\r\n{prompt}\r\n")));
@@ -221,8 +242,10 @@ mod tests {
         // serve_once accepts exactly one connection; a retry would fail with
         // a network error instead of Unauthorized — so this also proves no retry.
         let base = serve_once("HTTP/1.1 401 Unauthorized\r\nconnection: close\r\n\r\n{}");
-        assert!(matches!(client(base).transcribe(vec![0u8; 16], ""),
-                         Err(GroqError::Unauthorized)));
+        assert!(matches!(
+            client(base).transcribe(vec![0u8; 16], ""),
+            Err(GroqError::Unauthorized)
+        ));
     }
 
     #[test]
@@ -256,7 +279,10 @@ mod tests {
             }
         });
         let c = client(format!("http://{addr}"));
-        assert!(matches!(c.transcribe(vec![0u8; 16], ""), Err(GroqError::Server(_))));
+        assert!(matches!(
+            c.transcribe(vec![0u8; 16], ""),
+            Err(GroqError::Server(_))
+        ));
     }
 
     #[test]
@@ -271,8 +297,10 @@ mod tests {
     #[test]
     fn format_text_unauthorized_maps() {
         let base = serve_once("HTTP/1.1 401 Unauthorized\r\nconnection: close\r\n\r\n{}");
-        assert!(matches!(client(base).format_text("x"),
-                         Err(GroqError::Unauthorized)));
+        assert!(matches!(
+            client(base).format_text("x"),
+            Err(GroqError::Unauthorized)
+        ));
     }
 
     #[test]
@@ -282,7 +310,9 @@ mod tests {
         );
         assert!(client(base).validate_key().is_ok());
         let base = serve_once("HTTP/1.1 401 Unauthorized\r\nconnection: close\r\n\r\n{}");
-        assert!(matches!(client(base).validate_key(),
-                         Err(GroqError::Unauthorized)));
+        assert!(matches!(
+            client(base).validate_key(),
+            Err(GroqError::Unauthorized)
+        ));
     }
 }

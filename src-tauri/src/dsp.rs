@@ -23,6 +23,58 @@ pub fn resample_to_16k(input: &[i16], src_rate: u32) -> Vec<i16> {
     out
 }
 
+/// Keeps the interpolation position between microphone callbacks so splitting
+/// the same recording into different callback sizes does not change its speed.
+pub struct StreamingResampler {
+    source_rate: u32,
+    buffered: Vec<i16>,
+    next_position: f64,
+}
+
+impl StreamingResampler {
+    pub fn new() -> Self {
+        Self {
+            source_rate: 0,
+            buffered: Vec::new(),
+            next_position: 0.0,
+        }
+    }
+
+    pub fn push(&mut self, input: &[i16], source_rate: u32) -> Vec<i16> {
+        if input.is_empty() {
+            return Vec::new();
+        }
+        if source_rate == 16_000 {
+            self.source_rate = source_rate;
+            self.buffered.clear();
+            self.next_position = 0.0;
+            return input.to_vec();
+        }
+        if self.source_rate != source_rate {
+            self.source_rate = source_rate;
+            self.buffered.clear();
+            self.next_position = 0.0;
+        }
+
+        self.buffered.extend_from_slice(input);
+        let ratio = source_rate as f64 / 16_000.0;
+        let mut output = Vec::with_capacity((input.len() as f64 / ratio).ceil() as usize);
+        while self.next_position.floor() as usize + 1 < self.buffered.len() {
+            let lower = self.next_position.floor() as usize;
+            let fraction = self.next_position - lower as f64;
+            let first = self.buffered[lower] as f64;
+            let second = self.buffered[lower + 1] as f64;
+            output.push((first + (second - first) * fraction).round() as i16);
+            self.next_position += ratio;
+        }
+
+        let consumed = (self.next_position.floor() as usize).min(self.buffered.len());
+        self.buffered.drain(..consumed);
+        self.next_position -= consumed as f64;
+        output
+    }
+}
+
 /// Standard 44-byte RIFF/WAVE header + PCM data, built in memory.
 /// No temp files anywhere in the pipeline (spec §4).
 pub fn encode_wav_mono16(samples: &[i16], sample_rate: u32) -> Vec<u8> {
@@ -80,6 +132,18 @@ mod tests {
     #[test]
     fn resample_empty_is_empty() {
         assert!(resample_to_16k(&[], 48_000).is_empty());
+    }
+
+    #[test]
+    fn streaming_resample_preserves_timing_across_callback_boundaries() {
+        let input = vec![900i16; 4_800];
+        let mut resampler = StreamingResampler::new();
+        let mut output = resampler.push(&input[..1_701], 48_000);
+        output.extend(resampler.push(&input[1_701..3_119], 48_000));
+        output.extend(resampler.push(&input[3_119..], 48_000));
+
+        assert_eq!(output.len(), 1_600);
+        assert!(output.iter().all(|&sample| sample == 900));
     }
 
     #[test]

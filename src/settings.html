@@ -83,6 +83,7 @@
   }
   .seg button + button { border-left: 1px solid var(--divider); }
   .seg button.active { background: var(--text); color: var(--bg); font-weight: 700; }
+  #provider button { min-width: 190px; }
 
   .combo-keys { display: flex; align-items: center; gap: 11px; }
 
@@ -155,7 +156,18 @@
   <div class="rows">
     <div class="row">
       <div>
-        <div class="label">Groq API key</div>
+        <div class="label">Transcription provider</div>
+        <div class="desc">Only the selected provider receives your recording</div>
+      </div>
+      <div class="seg" id="provider">
+        <button data-provider="gemini">Google Gemini 3.5 Transcribe</button>
+        <button data-provider="groq">Groq Whisper</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label" id="api-key-label">Groq API key</div>
         <div class="desc">Stored locally on this PC <span class="keyfeedback" id="key-feedback"></span></div>
       </div>
       <div class="ctl">
@@ -165,6 +177,14 @@
         </button>
         <button class="btn btn-primary" id="save-key" style="padding:9px 16px">Save</button>
       </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <div class="label" id="model-label">Groq model</div>
+        <div class="desc">Saved separately for each provider</div>
+      </div>
+      <input type="text" id="provider-model" />
     </div>
 
     <div class="row">
@@ -214,7 +234,7 @@
     <div class="row">
       <div>
         <div class="label">Custom vocabulary</div>
-        <div class="desc">Names and jargon Whisper should spell correctly <span class="micnote" id="vocab-note"></span></div>
+        <div class="desc">Names and jargon the selected provider should spell correctly <span class="micnote" id="vocab-note"></span></div>
       </div>
       <div class="chips" id="vocab">
         <input type="text" id="vocab-input" placeholder="add a word..." />

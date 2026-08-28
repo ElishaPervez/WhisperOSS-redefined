@@ -6,6 +6,7 @@ mod clipboard;
 mod commands;
 mod config;
 mod dsp;
+mod gemini;
 mod groq;
 mod hook;
 mod hotkey_logic;
@@ -17,7 +18,7 @@ mod prompts;
 mod state;
 
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager, PhysicalPosition, WindowEvent};
 
 pub fn run() {
@@ -34,13 +35,17 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_settings,
+            commands::get_key_status,
             commands::has_api_key,
+            commands::set_transcription_provider,
+            commands::set_provider_model,
             commands::set_formatter,
             commands::set_casual,
             commands::set_theme,
             commands::set_vocabulary,
             commands::set_autostart,
             commands::save_api_key,
+            commands::save_provider_key,
             commands::list_microphones,
             commands::set_microphone,
             commands::finish_first_run,
@@ -98,15 +103,28 @@ pub fn run() {
             config::save(&cfg);
             autostart::reconcile(cfg.run_on_startup);
 
-            let key = keys::load().unwrap_or_default();
+            let groq_key = keys::load(keys::Provider::Groq).unwrap_or_default();
+            let gemini_key = keys::load(keys::Provider::Gemini).unwrap_or_default();
             let audio_engine =
                 audio::AudioEngine::start(app.handle().clone(), cfg.input_device.clone());
-            let app_state = state::AppState::new(cfg.clone(), key.clone(), audio_engine);
+            let app_state = state::AppState::new(
+                cfg.clone(),
+                groq_key.clone(),
+                gemini_key.clone(),
+                audio_engine,
+            );
             app.manage(app_state.clone());
 
-            if key.is_empty() {
-                applog::log("first-run-no-key");
-                show_first_run(app.handle());
+            let selected_key_missing = match cfg.transcription_provider {
+                config::TranscriptionProvider::Groq => groq_key.is_empty(),
+                config::TranscriptionProvider::Gemini => gemini_key.is_empty(),
+            };
+            if selected_key_missing {
+                applog::log("first-run-selected-provider-has-no-key");
+                match cfg.transcription_provider {
+                    config::TranscriptionProvider::Groq => show_first_run(app.handle()),
+                    config::TranscriptionProvider::Gemini => show_settings_at_key(app.handle()),
+                }
             }
             pipeline::start(app.handle().clone(), app_state);
 

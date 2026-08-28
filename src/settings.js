@@ -8,6 +8,24 @@ document.getElementById("close").onclick = () => win.hide();
 
 const el = (id) => document.getElementById(id);
 let vocabularyWords = [];
+let currentProvider = "groq";
+let providerModels = { groq: "whisper-large-v3-turbo", gemini: "gemini-3.5-transcribe-live" };
+let keyStatus = { groq: false, gemini: false };
+
+const PROVIDERS = {
+  groq: {
+    keyLabel: "Groq API key",
+    modelLabel: "Groq model",
+    keyPlaceholder: "gsk_...",
+    rejected: "Groq rejected this key, paste a new one",
+  },
+  gemini: {
+    keyLabel: "Google API key",
+    modelLabel: "Google transcription model",
+    keyPlaceholder: "AIza...",
+    rejected: "Google rejected this key, paste a new one",
+  },
+};
 
 function paintToggle(node, on) {
   node.classList.toggle("on", on);
@@ -18,6 +36,25 @@ function applyTheme(theme) {
   else document.documentElement.dataset.theme = theme;
   for (const b of el("theme").children) {
     b.classList.toggle("active", b.dataset.theme === theme);
+  }
+}
+
+function paintProviderSettings() {
+  for (const button of el("provider").children) {
+    button.classList.toggle("active", button.dataset.provider === currentProvider);
+  }
+  const meta = PROVIDERS[currentProvider];
+  el("api-key-label").textContent = meta.keyLabel;
+  el("model-label").textContent = meta.modelLabel;
+  el("provider-model").value = providerModels[currentProvider];
+  el("api-key").value = "";
+  el("api-key").type = "password";
+  if (keyStatus[currentProvider]) {
+    el("api-key").placeholder = "****************";
+    setKeyFeedback("Saved", "ok");
+  } else {
+    el("api-key").placeholder = meta.keyPlaceholder;
+    setKeyFeedback("No key saved", "err");
   }
 }
 
@@ -139,19 +176,15 @@ async function load() {
   paintToggle(el("autostart"), cfg.run_on_startup);
   applyTheme(cfg.theme);
   vocabularyWords = [...cfg.vocabulary];
+  currentProvider = cfg.transcription_provider;
+  providerModels = { groq: cfg.groq_model, gemini: cfg.gemini_model };
+  keyStatus = await invoke("get_key_status");
+  paintProviderSettings();
   renderVocabulary();
 
   renderCombo(cfg.hotkey);
   await refreshMic();
 
-  const hasKey = await invoke("has_api_key");
-  if (hasKey) {
-    el("api-key").placeholder = "••••••••••••••••";
-    setKeyFeedback("Saved", "ok");
-  } else {
-    el("api-key").placeholder = "gsk_…";
-    setKeyFeedback("", "");
-  }
 }
 
 function setKeyFeedback(text, kind) {
@@ -172,6 +205,32 @@ function wireToggle(id, command) {
 wireToggle("formatter", "set_formatter");
 wireToggle("casual", "set_casual");
 wireToggle("autostart", "set_autostart");
+
+// --- transcription provider and its separately retained model ---
+for (const button of el("provider").children) {
+  button.onclick = async () => {
+    currentProvider = button.dataset.provider;
+    paintProviderSettings();
+    await invoke("set_transcription_provider", { value: currentProvider });
+    el("status-text").textContent = `${button.textContent} selected`;
+  };
+}
+
+async function saveProviderModel() {
+  const input = el("provider-model");
+  await invoke("set_provider_model", {
+    provider: currentProvider,
+    value: input.value.trim(),
+  });
+  const cfg = await invoke("get_settings");
+  providerModels = { groq: cfg.groq_model, gemini: cfg.gemini_model };
+  input.value = providerModels[currentProvider];
+  el("status-text").textContent = "Transcription model updated";
+}
+el("provider-model").onchange = saveProviderModel;
+el("provider-model").onkeydown = (event) => {
+  if (event.key === "Enter") el("provider-model").blur();
+};
 
 // --- custom vocabulary ---
 el("vocab-input").onkeydown = async (event) => {
@@ -199,7 +258,8 @@ el("save-key").onclick = async () => {
   setKeyFeedback("Checking…", "");
   el("save-key").disabled = true;
   try {
-    await invoke("save_api_key", { key });
+    await invoke("save_provider_key", { provider: currentProvider, key });
+    keyStatus[currentProvider] = true;
     setKeyFeedback("Saved", "ok");
     el("api-key").value = "";
     el("api-key").placeholder = "••••••••••••••••";
@@ -226,7 +286,10 @@ listen("settings-shown", async ({ payload }) => {
     input.value = "";
     input.type = "password";
     input.focus();
-    setKeyFeedback("Groq rejected this key, paste a new one", "err");
+    const message = keyStatus[currentProvider]
+      ? PROVIDERS[currentProvider].rejected
+      : `Add a ${currentProvider === "gemini" ? "Google" : "Groq"} key to start dictating`;
+    setKeyFeedback(message, "err");
   }
 });
 

@@ -37,12 +37,41 @@ fn pick_device(preferred: &Option<String>) -> Option<cpal::Device> {
 
 const PRE_ROLL_SECS: f64 = 0.5;
 
+pub trait AudioStreamSink: Send + Sync {
+    fn push(&self, samples: Vec<i16>, source_rate: u32);
+}
+
+struct RecordingBuffer {
+    samples: Vec<i16>,
+    sink: Option<Arc<dyn AudioStreamSink>>,
+}
+
+impl RecordingBuffer {
+    fn start(
+        samples: Vec<i16>,
+        source_rate: u32,
+        sink: Option<Arc<dyn AudioStreamSink>>,
+    ) -> Self {
+        if let Some(stream) = sink.as_ref() {
+            stream.push(samples.clone(), source_rate);
+        }
+        Self { samples, sink }
+    }
+
+    fn append(&mut self, samples: &[i16], source_rate: u32) {
+        self.samples.extend_from_slice(samples);
+        if let Some(stream) = self.sink.as_ref() {
+            stream.push(samples.to_vec(), source_rate);
+        }
+    }
+}
+
 pub struct AudioEngine {
     /// Kept so the engine can tell the settings window when the microphone
     /// situation changes while that window is already open.
     app: tauri::AppHandle,
     ring: Mutex<VecDeque<i16>>,
-    recording: Mutex<Option<Vec<i16>>>,
+    recording: Mutex<Option<RecordingBuffer>>,
     rate: AtomicU32,
     peak: AtomicU16,
     healthy: AtomicBool,
@@ -185,12 +214,29 @@ impl AudioEngine {
 
     /// Instant start: seed the take with the pre-roll ring contents.
     pub fn start_recording(&self) {
-        let seed: Vec<i16> = self.ring.lock().unwrap().iter().copied().collect();
-        *self.recording.lock().unwrap() = Some(seed);
+        self.start_recording_with_sink(None);
+    }
+
+    pub fn start_streaming_recording(&self, sink: Arc<dyn AudioStreamSink>) {
+        self.start_recording_with_sink(Some(sink));
+    }
+
+    fn start_recording_with_sink(&self, sink: Option<Arc<dyn AudioStreamSink>>) {
+        let ring = self.ring.lock().unwrap();
+        let seed: Vec<i16> = ring.iter().copied().collect();
+        let rate = self.rate.load(Ordering::SeqCst);
+        *self.recording.lock().unwrap() = Some(RecordingBuffer::start(seed, rate, sink));
+        drop(ring);
     }
 
     pub fn stop_recording(&self) -> (Vec<i16>, u32) {
-        let samples = self.recording.lock().unwrap().take().unwrap_or_default();
+        let samples = self
+            .recording
+            .lock()
+            .unwrap()
+            .take()
+            .map(|recording| recording.samples)
+            .unwrap_or_default();
         (samples, self.rate.load(Ordering::SeqCst))
     }
 
@@ -204,8 +250,8 @@ impl AudioEngine {
                 ring.push_back(s);
             }
         }
-        if let Some(buf) = self.recording.lock().unwrap().as_mut() {
-            buf.extend_from_slice(mono);
+        if let Some(recording) = self.recording.lock().unwrap().as_mut() {
+            recording.append(mono, self.rate.load(Ordering::SeqCst));
         }
         let peak = mono.iter().map(|s| s.unsigned_abs()).max().unwrap_or(0);
         self.peak.fetch_max(peak, Ordering::SeqCst);
@@ -396,6 +442,32 @@ fn build_stream(
 #[cfg(test)]
 mod tests {
     use super::{reclaim_step, Reclaim};
+    use super::{AudioStreamSink, RecordingBuffer};
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Default)]
+    struct PacketCollector(Mutex<Vec<(Vec<i16>, u32)>>);
+
+    impl AudioStreamSink for PacketCollector {
+        fn push(&self, samples: Vec<i16>, source_rate: u32) {
+            self.0.lock().unwrap().push((samples, source_rate));
+        }
+    }
+
+    #[test]
+    fn recording_sends_preroll_then_live_chunks_without_losing_local_audio() {
+        let collector = Arc::new(PacketCollector::default());
+        let sink: Arc<dyn AudioStreamSink> = collector.clone();
+        let mut recording = RecordingBuffer::start(vec![1, 2], 48_000, Some(sink));
+
+        recording.append(&[3, 4], 48_000);
+
+        assert_eq!(recording.samples, vec![1, 2, 3, 4]);
+        assert_eq!(
+            *collector.0.lock().unwrap(),
+            vec![(vec![1, 2], 48_000), (vec![3, 4], 48_000)]
+        );
+    }
 
     #[test]
     fn reclaim_decision() {

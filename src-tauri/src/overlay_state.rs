@@ -2,6 +2,7 @@
 //! webview only renders. States: listening | processing | success | error
 //! | hidden. Durations come from the approved design (art2-pill.png).
 
+use crate::gemini::GeminiError;
 use crate::groq::GroqError;
 
 pub const FADE_MS: u64 = 240;
@@ -15,11 +16,19 @@ pub fn ui_payload(state: &str, message: &str) -> serde_json::Value {
 /// Spec §6 error table: (short pill message, detail for the log).
 /// Reading the detail here is also what finally consumes the error
 /// payloads M1 left unread (the old dead-code warnings).
-pub fn describe_error(err: &GroqError) -> (&'static str, String) {
+pub fn describe_groq_error(err: &GroqError) -> (&'static str, String) {
     match err {
         GroqError::Unauthorized => ("Invalid API key", String::new()),
         GroqError::Network(detail) => ("Couldn't reach Groq", detail.clone()),
         GroqError::Server(detail) => ("Groq error", detail.clone()),
+    }
+}
+
+pub fn describe_gemini_error(err: &GeminiError) -> (&'static str, String) {
+    match err {
+        GeminiError::Unauthorized => ("Invalid Google key", String::new()),
+        GeminiError::Network(detail) => ("Couldn't reach Google", detail.clone()),
+        GeminiError::Server(detail) => ("Google error", detail.clone()),
     }
 }
 
@@ -39,17 +48,21 @@ mod tests {
 
     #[test]
     fn error_descriptions_match_spec() {
-        let (msg, detail) = describe_error(&GroqError::Unauthorized);
+        let (msg, detail) = describe_groq_error(&GroqError::Unauthorized);
         assert_eq!(msg, "Invalid API key");
         assert_eq!(detail, "");
 
-        let (msg, detail) = describe_error(&GroqError::Network("dns fail".into()));
+        let (msg, detail) = describe_groq_error(&GroqError::Network("dns fail".into()));
         assert_eq!(msg, "Couldn't reach Groq");
         assert_eq!(detail, "dns fail");
 
-        let (msg, detail) = describe_error(&GroqError::Server("HTTP 500".into()));
+        let (msg, detail) = describe_groq_error(&GroqError::Server("HTTP 500".into()));
         assert_eq!(msg, "Groq error");
         assert_eq!(detail, "HTTP 500");
+
+        let (msg, detail) = describe_gemini_error(&GeminiError::Network("dns fail".into()));
+        assert_eq!(msg, "Couldn't reach Google");
+        assert_eq!(detail, "dns fail");
     }
 
     #[test]

@@ -7,6 +7,22 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+pub const DEFAULT_GROQ_MODEL: &str = "whisper-large-v3-turbo";
+pub const DEFAULT_GEMINI_MODEL: &str = "gemini-3.5-transcribe-live";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TranscriptionProvider {
+    Groq,
+    Gemini,
+}
+
+impl Default for TranscriptionProvider {
+    fn default() -> Self {
+        Self::Groq
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -24,6 +40,11 @@ pub struct Config {
     /// vocabulary, 2026-08-09). Empty = feature off, field omitted from the
     /// request.
     pub vocabulary: Vec<String>,
+    /// Only this provider receives recorded audio. Provider-specific values
+    /// remain stored when the user switches away and back.
+    pub transcription_provider: TranscriptionProvider,
+    pub groq_model: String,
+    pub gemini_model: String,
 }
 
 impl Default for Config {
@@ -36,12 +57,19 @@ impl Default for Config {
             theme: "auto".into(),
             run_on_startup: true,
             vocabulary: Vec::new(),
+            transcription_provider: TranscriptionProvider::Groq,
+            groq_model: DEFAULT_GROQ_MODEL.into(),
+            gemini_model: DEFAULT_GEMINI_MODEL.into(),
         }
     }
 }
 
 pub fn from_json(text: &str) -> Config {
-    serde_json::from_str(text).unwrap_or_default()
+    let mut config: Config = serde_json::from_str(text).unwrap_or_default();
+    if config.gemini_model == "gemini-3.5-transcribe" {
+        config.gemini_model = DEFAULT_GEMINI_MODEL.into();
+    }
+    config
 }
 
 pub fn to_json(cfg: &Config) -> String {
@@ -82,6 +110,10 @@ mod tests {
         assert_eq!(c.theme, "auto");
         assert!(c.run_on_startup);
         assert!(c.vocabulary.is_empty());
+        assert_eq!(c.transcription_provider, TranscriptionProvider::Groq);
+        assert_eq!(c.groq_model, DEFAULT_GROQ_MODEL);
+        assert_eq!(c.gemini_model, DEFAULT_GEMINI_MODEL);
+        assert_eq!(c.gemini_model, "gemini-3.5-transcribe-live");
     }
 
     #[test]
@@ -91,6 +123,8 @@ mod tests {
         assert_eq!(c.hotkey, vec!["ctrl".to_string(), "win".to_string()]);
         assert_eq!(c.theme, "auto");
         assert!(c.vocabulary.is_empty());
+        assert_eq!(c.transcription_provider, TranscriptionProvider::Groq);
+        assert_eq!(c.gemini_model, DEFAULT_GEMINI_MODEL);
     }
 
     #[test]
@@ -100,11 +134,25 @@ mod tests {
     }
 
     #[test]
+    fn saved_completed_audio_model_migrates_to_live() {
+        let c = from_json(
+            r#"{
+                "transcription_provider": "gemini",
+                "gemini_model": "gemini-3.5-transcribe"
+            }"#,
+        );
+
+        assert_eq!(c.gemini_model, "gemini-3.5-transcribe-live");
+    }
+
+    #[test]
     fn roundtrip() {
         let mut c = Config::default();
         c.casual_mode = true;
         c.input_device = Some("Yeti Nano (WASAPI)".into());
         c.vocabulary = vec!["Codex".into(), "Claude Code".into()];
+        c.transcription_provider = TranscriptionProvider::Gemini;
+        c.gemini_model = "gemini-test-model".into();
         assert_eq!(from_json(&to_json(&c)), c);
     }
 }

@@ -4,7 +4,7 @@
 
 use tauri::{Manager, State};
 
-use crate::{applog, audio, autostart, config, groq, keys, state::AppState};
+use crate::{applog, audio, autostart, config, gemini, groq, keys, state::AppState};
 
 /// Only three themes are valid; anything else falls back to "auto".
 pub fn normalize_theme(value: &str) -> String {
@@ -25,9 +25,65 @@ pub fn get_settings(state: State<AppState>) -> config::Config {
     state.config.lock().unwrap().clone()
 }
 
+#[derive(serde::Serialize)]
+pub struct KeyStatus {
+    pub groq: bool,
+    pub gemini: bool,
+}
+
+#[tauri::command]
+pub fn get_key_status(state: State<AppState>) -> KeyStatus {
+    KeyStatus {
+        groq: !state.groq_key.lock().unwrap().is_empty(),
+        gemini: !state.gemini_key.lock().unwrap().is_empty(),
+    }
+}
+
 #[tauri::command]
 pub fn has_api_key(state: State<AppState>) -> bool {
-    !state.key.lock().unwrap().is_empty()
+    let provider = state.config.lock().unwrap().transcription_provider;
+    match provider {
+        config::TranscriptionProvider::Groq => !state.groq_key.lock().unwrap().is_empty(),
+        config::TranscriptionProvider::Gemini => !state.gemini_key.lock().unwrap().is_empty(),
+    }
+}
+
+#[tauri::command]
+pub fn set_transcription_provider(state: State<AppState>, value: String) {
+    let provider = if value.eq_ignore_ascii_case("gemini") {
+        config::TranscriptionProvider::Gemini
+    } else {
+        config::TranscriptionProvider::Groq
+    };
+    state.config.lock().unwrap().transcription_provider = provider;
+    persist(&state);
+    applog::log("setting-transcription-provider-changed");
+}
+
+fn sanitized_model(value: &str, fallback: &str) -> String {
+    let value = value.trim();
+    if !value.is_empty()
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '/'))
+    {
+        value.to_string()
+    } else {
+        fallback.to_string()
+    }
+}
+
+#[tauri::command]
+pub fn set_provider_model(state: State<AppState>, provider: String, value: String) {
+    let mut cfg = state.config.lock().unwrap();
+    if provider.eq_ignore_ascii_case("gemini") {
+        cfg.gemini_model = sanitized_model(&value, config::DEFAULT_GEMINI_MODEL);
+    } else {
+        cfg.groq_model = sanitized_model(&value, config::DEFAULT_GROQ_MODEL);
+    }
+    drop(cfg);
+    persist(&state);
+    applog::log("setting-transcription-model-changed");
 }
 
 #[tauri::command]
@@ -89,26 +145,73 @@ pub fn set_autostart(state: State<AppState>, value: bool) {
 /// a short error message for inline display.
 #[tauri::command]
 pub fn save_api_key(state: State<AppState>, key: String) -> Result<(), String> {
+    save_key(&state, config::TranscriptionProvider::Groq, key)
+}
+
+#[tauri::command]
+pub fn save_provider_key(
+    state: State<AppState>,
+    provider: String,
+    key: String,
+) -> Result<(), String> {
+    let provider = if provider.eq_ignore_ascii_case("gemini") {
+        config::TranscriptionProvider::Gemini
+    } else {
+        config::TranscriptionProvider::Groq
+    };
+    save_key(&state, provider, key)
+}
+
+fn save_key(
+    state: &AppState,
+    provider: config::TranscriptionProvider,
+    key: String,
+) -> Result<(), String> {
     let key = key.trim().to_string();
     if key.is_empty() {
         return Err("Enter a key".into());
     }
-    let client = groq::GroqClient::new(
-        key.clone(),
-        groq::PROD_BASE_URL.to_string(),
-        std::time::Duration::from_secs(15),
-    );
-    match client.validate_key() {
-        Ok(()) => {
-            if !keys::save(&key) {
-                return Err("Couldn't save to Credential Manager".into());
+
+    let timeout = std::time::Duration::from_secs(15);
+    match provider {
+        config::TranscriptionProvider::Groq => {
+            let model = state.config.lock().unwrap().groq_model.clone();
+            let client =
+                groq::GroqClient::new(key.clone(), model, groq::PROD_BASE_URL.to_string(), timeout);
+            match client.validate_key() {
+                Ok(()) => {
+                    if !keys::save(keys::Provider::Groq, &key) {
+                        return Err("Couldn't save to Credential Manager".into());
+                    }
+                    *state.groq_key.lock().unwrap() = key;
+                    Ok(())
+                }
+                Err(groq::GroqError::Unauthorized) => Err("Groq rejected this key".into()),
+                Err(groq::GroqError::Network(_)) => Err("Couldn't reach Groq".into()),
+                Err(groq::GroqError::Server(_)) => Err("Groq error, try again".into()),
             }
-            *state.key.lock().unwrap() = key;
-            Ok(())
         }
-        Err(groq::GroqError::Unauthorized) => Err("Groq rejected this key".into()),
-        Err(groq::GroqError::Network(_)) => Err("Couldn't reach Groq".into()),
-        Err(groq::GroqError::Server(_)) => Err("Groq error, try again".into()),
+        config::TranscriptionProvider::Gemini => {
+            let model = state.config.lock().unwrap().gemini_model.clone();
+            let client = gemini::GeminiClient::new(
+                key.clone(),
+                model,
+                gemini::PROD_BASE_URL.to_string(),
+                timeout,
+            );
+            match client.validate_key() {
+                Ok(()) => {
+                    if !keys::save(keys::Provider::Gemini, &key) {
+                        return Err("Couldn't save to Credential Manager".into());
+                    }
+                    *state.gemini_key.lock().unwrap() = key;
+                    Ok(())
+                }
+                Err(gemini::GeminiError::Unauthorized) => Err("Google rejected this key".into()),
+                Err(gemini::GeminiError::Network(_)) => Err("Couldn't reach Google".into()),
+                Err(gemini::GeminiError::Server(_)) => Err("Google error, try again".into()),
+            }
+        }
     }
 }
 
@@ -179,6 +282,16 @@ mod tests {
         ];
 
         assert_eq!(sanitize_vocabulary(value), vec!["Claude", "OpenAI"]);
+    }
+
+    #[test]
+    fn model_names_reject_values_that_could_change_the_request_path() {
+        assert_eq!(
+            sanitized_model("gemini-3.5-transcribe", "fallback"),
+            "gemini-3.5-transcribe"
+        );
+        assert_eq!(sanitized_model(" ../bad?key=x ", "fallback"), "fallback");
+        assert_eq!(sanitized_model("", "fallback"), "fallback");
     }
 }
 

@@ -31,7 +31,7 @@
         "title": "WhisperOSS",
         "url": "settings.html",
         "width": 960,
-        "height": 700,
+        "height": 820,
         "resizable": false,
         "maximizable": false,
         "decorations": false,
@@ -65,7 +65,7 @@
     "targets": ["nsis"],
     "publisher": "Elisha Pervez",
     "shortDescription": "Hold Ctrl+Win, speak, release.",
-    "longDescription": "Dictation for Windows. Hold Ctrl+Win in any app, speak, and release. Your words are typed wherever the cursor already was. Transcription runs on Groq; the API key stays on this PC.",
+    "longDescription": "Dictation for Windows. Hold Ctrl+Win in any app, speak, and release. Your words are typed wherever the cursor already was. Choose Google Gemini or Groq transcription; API keys stay on this PC.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

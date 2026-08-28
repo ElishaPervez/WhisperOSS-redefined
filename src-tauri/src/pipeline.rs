@@ -11,10 +11,47 @@ use std::time::Duration;
 
 use tauri::{Emitter, Manager};
 
-use crate::{applog, clipboard, dsp, groq, hook, hotkey_logic, keys, overlay_state, position};
+use crate::{
+    applog, clipboard, config, dsp, gemini, groq, hook, hotkey_logic, keys, overlay_state, position,
+};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const PASTE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(5);
+
+enum CaptureRoute {
+    Buffered,
+    Gemini(gemini::LiveConfig),
+}
+
+fn capture_route(
+    provider: config::TranscriptionProvider,
+    key: String,
+    model: String,
+    vocabulary: Vec<String>,
+    formatting: Formatting,
+) -> CaptureRoute {
+    match provider {
+        config::TranscriptionProvider::Groq => CaptureRoute::Buffered,
+        config::TranscriptionProvider::Gemini => CaptureRoute::Gemini(gemini::LiveConfig {
+            key,
+            model: if model == "gemini-3.5-transcribe" {
+                config::DEFAULT_GEMINI_MODEL.into()
+            } else {
+                model
+            },
+            vocabulary,
+            smart: matches!(formatting, Formatting::Ai),
+        }),
+    }
+}
+
+#[derive(Clone)]
+struct ActiveCapture {
+    provider: config::TranscriptionProvider,
+    formatting: Formatting,
+    vocabulary: Vec<String>,
+    groq_model: String,
+}
 
 struct Ui {
     app: tauri::AppHandle,
@@ -80,7 +117,11 @@ fn combo_from_config(state: &crate::state::AppState) -> Vec<hotkey_logic::Key> {
 fn apply_combo(combo: &[hotkey_logic::Key]) {
     hook::set_suppression(
         hotkey_logic::combo_other_vk(combo),
-        &combo.iter().copied().filter(|k| k.is_modifier()).collect::<Vec<_>>(),
+        &combo
+            .iter()
+            .copied()
+            .filter(|k| k.is_modifier())
+            .collect::<Vec<_>>(),
     );
 }
 
@@ -92,48 +133,108 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
     let generation = state.generation.clone();
     let combo = combo_from_config(&state);
     apply_combo(&combo);
+    let gemini_live = gemini::GeminiLive::spawn(gemini::PROD_WS_URL.to_string(), REQUEST_TIMEOUT);
 
     std::thread::spawn(move || {
         let mut tracker = hotkey_logic::HoldTracker::new(combo);
+        let mut active_capture: Option<ActiveCapture> = None;
 
         for ev in rx {
             match tracker.on_event(ev) {
                 hotkey_logic::Action::None => {}
                 hotkey_logic::Action::Start => {
-                    if state.key.lock().unwrap().is_empty() {
-                        applog::log("recording-refused-no-key");
-                        crate::show_first_run(&app);
+                    let (provider, formatting, vocabulary, groq_model, gemini_model) = {
+                        let cfg = state.config.lock().unwrap();
+                        (
+                            cfg.transcription_provider,
+                            formatting_mode(cfg.use_formatter, cfg.casual_mode),
+                            cfg.vocabulary.clone(),
+                            cfg.groq_model.clone(),
+                            cfg.gemini_model.clone(),
+                        )
+                    };
+                    let key = match provider {
+                        config::TranscriptionProvider::Groq => {
+                            refreshed_provider_key(&state.groq_key, keys::Provider::Groq)
+                        }
+                        config::TranscriptionProvider::Gemini => {
+                            refreshed_provider_key(&state.gemini_key, keys::Provider::Gemini)
+                        }
+                    };
+                    if key.is_empty() {
+                        applog::log("recording-refused-selected-provider-has-no-key");
+                        crate::show_settings_at_key(&app);
                         continue;
                     }
                     let my_gen = generation.fetch_add(1, Ordering::SeqCst) + 1;
-                    let ui = Ui { app: app.clone(), generation: generation.clone() };
+                    let ui = Ui {
+                        app: app.clone(),
+                        generation: generation.clone(),
+                    };
                     if !audio.is_healthy() {
                         applog::log("recording-refused-no-mic");
                         std::thread::spawn(move || ui.show_error(my_gen, "No mic detected"));
                         continue;
                     }
-                    audio.start_recording();
+                    let capture = ActiveCapture {
+                        provider,
+                        formatting,
+                        vocabulary: vocabulary.clone(),
+                        groq_model,
+                    };
+                    match capture_route(provider, key, gemini_model, vocabulary, formatting) {
+                        CaptureRoute::Buffered => audio.start_recording(),
+                        CaptureRoute::Gemini(config) => match gemini_live.begin(config) {
+                            Ok(sink) => audio.start_streaming_recording(Arc::new(sink)),
+                            Err(error) => {
+                                let (message, detail) =
+                                    overlay_state::describe_gemini_error(&error);
+                                applog::log(&format!("transcribe-start-error {message} {detail}"));
+                                std::thread::spawn(move || ui.show_error(my_gen, message));
+                                continue;
+                            }
+                        },
+                    }
+                    active_capture = Some(capture);
                     ui.show(my_gen, position::PILL_LOGICAL_W);
                     ui.emit(my_gen, "listening", "");
                     applog::log("recording-start");
                 }
                 hotkey_logic::Action::Cancel => {
                     let _ = audio.stop_recording();
+                    if active_capture.take().is_some_and(|capture| {
+                        capture.provider == config::TranscriptionProvider::Gemini
+                    }) {
+                        gemini_live.cancel();
+                    }
                     let my_gen = generation.load(Ordering::SeqCst);
-                    let ui = Ui { app: app.clone(), generation: generation.clone() };
+                    let ui = Ui {
+                        app: app.clone(),
+                        generation: generation.clone(),
+                    };
                     std::thread::spawn(move || ui.fade_out_and_hide(my_gen));
                     applog::log("recording-cancel-short-tap");
                 }
                 hotkey_logic::Action::Finish { held_ms } => {
                     let (samples, rate) = audio.stop_recording();
+                    let Some(capture) = active_capture.take() else {
+                        applog::log("recording-finish-without-active-capture");
+                        continue;
+                    };
                     applog::log(&format!(
                         "recording-finish held_ms={held_ms} samples={}",
                         samples.len()
                     ));
                     let my_gen = generation.load(Ordering::SeqCst);
-                    let ui = Ui { app: app.clone(), generation: generation.clone() };
+                    let ui = Ui {
+                        app: app.clone(),
+                        generation: generation.clone(),
+                    };
 
                     if dsp::is_effectively_silent(&samples) {
+                        if capture.provider == config::TranscriptionProvider::Gemini {
+                            gemini_live.cancel();
+                        }
                         let wanted = state.config.lock().unwrap().input_device.clone();
                         if on_fallback_device(&wanted, &audio.active_device()) {
                             applog::log("silent-on-fallback-device");
@@ -146,40 +247,55 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                     }
 
                     ui.emit(my_gen, "processing", "");
-                    let wav = dsp::encode_wav_mono16(
-                        &dsp::resample_to_16k(&samples, rate),
-                        16_000,
-                    );
+                    let wav =
+                        (capture.provider == config::TranscriptionProvider::Groq).then(|| {
+                            dsp::encode_wav_mono16(&dsp::resample_to_16k(&samples, rate), 16_000)
+                        });
+                    let live_result = (capture.provider == config::TranscriptionProvider::Gemini)
+                        .then(|| gemini_live.finish());
                     let state = state.clone();
                     std::thread::spawn(move || {
-                        // Re-read the vault at dictation time: a key saved in
-                        // settings (or by another launch) must win over this
-                        // process's launch-time snapshot. A failed vault read
-                        // falls back to the snapshot.
-                        let key = {
-                            let mut mem = state.key.lock().unwrap();
-                            let (key, changed) =
-                                keys::refreshed_key(&mem, keys::read_vault());
-                            if changed {
-                                *mem = key.clone();
-                                applog::log("api-key-refreshed-from-vault");
+                        enum ProviderFailure {
+                            Groq(groq::GroqError),
+                            Gemini(gemini::GeminiError),
+                        }
+
+                        let mut groq_client = None;
+                        let transcript = match capture.provider {
+                            config::TranscriptionProvider::Groq => {
+                                let key =
+                                    refreshed_provider_key(&state.groq_key, keys::Provider::Groq);
+                                let client = groq::GroqClient::new(
+                                    key,
+                                    capture.groq_model,
+                                    groq::PROD_BASE_URL.to_string(),
+                                    REQUEST_TIMEOUT,
+                                );
+                                let result = client
+                                    .transcribe(
+                                        wav.expect("Groq capture has WAV audio"),
+                                        &capture.vocabulary.join(", "),
+                                    )
+                                    .map_err(ProviderFailure::Groq);
+                                groq_client = Some(client);
+                                result
                             }
-                            key
+                            config::TranscriptionProvider::Gemini => {
+                                match live_result.expect("Gemini capture has Live result") {
+                                    Ok(receiver) => receiver
+                                        .recv_timeout(Duration::from_secs(70))
+                                        .unwrap_or_else(|_| {
+                                            Err(gemini::GeminiError::Network(
+                                                "Live finalization timed out".into(),
+                                            ))
+                                        })
+                                        .map_err(ProviderFailure::Gemini),
+                                    Err(error) => Err(ProviderFailure::Gemini(error)),
+                                }
+                            }
                         };
-                        let (use_formatter, casual, vocab) = {
-                            let cfg = state.config.lock().unwrap();
-                            (
-                                cfg.use_formatter,
-                                cfg.casual_mode,
-                                cfg.vocabulary.join(", "),
-                            )
-                        };
-                        let client = groq::GroqClient::new(
-                            key,
-                            groq::PROD_BASE_URL.to_string(),
-                            REQUEST_TIMEOUT,
-                        );
-                        match client.transcribe(wav, &vocab) {
+
+                        match transcript {
                             Ok(_) if !ui.current(my_gen) => {
                                 applog::log("result-discarded-stale");
                                 // No UI touches: a newer dictation owns the pill.
@@ -189,18 +305,25 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                                 ui.fade_out_and_hide(my_gen);
                             }
                             Ok(text) => {
-                                let final_text = match formatting_mode(use_formatter, casual) {
+                                let final_text = match capture.formatting {
                                     Formatting::Casual => crate::casualize::casualize(&text),
-                                    Formatting::Ai => match client.format_text(&text) {
-                                        Ok(f) if !f.is_empty() => f,
-                                        Ok(_) => text.clone(),
-                                        Err(e) => {
-                                            let (m, d) = overlay_state::describe_error(&e);
-                                            applog::log(&format!(
-                                                "formatter-failed-fallback-raw {m} {d}"
-                                            ));
-                                            text.clone()
-                                        }
+                                    Formatting::Ai => match groq_client.as_ref() {
+                                        Some(client) => match client.format_text(&text) {
+                                            Ok(formatted) if !formatted.is_empty() => formatted,
+                                            Ok(_) => text.clone(),
+                                            Err(error) => {
+                                                let (message, detail) =
+                                                    overlay_state::describe_groq_error(&error);
+                                                applog::log(&format!(
+                                                    "formatter-failed-fallback-raw {message} {detail}"
+                                                ));
+                                                text.clone()
+                                            }
+                                        },
+                                        // Gemini Smart transcription already formatted the text
+                                        // in the same request; contacting Groq here would violate
+                                        // the selected-provider boundary.
+                                        None => text.clone(),
                                     },
                                     Formatting::Raw => text.clone(),
                                 };
@@ -214,10 +337,29 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                                     ui.show_error(my_gen, "Couldn't paste safely");
                                 }
                             }
-                            Err(e) => {
-                                let (message, detail) = overlay_state::describe_error(&e);
+                            Err(error) => {
+                                let (message, detail, unauthorized) = match &error {
+                                    ProviderFailure::Groq(error) => {
+                                        let (message, detail) =
+                                            overlay_state::describe_groq_error(error);
+                                        (
+                                            message,
+                                            detail,
+                                            matches!(error, groq::GroqError::Unauthorized),
+                                        )
+                                    }
+                                    ProviderFailure::Gemini(error) => {
+                                        let (message, detail) =
+                                            overlay_state::describe_gemini_error(error);
+                                        (
+                                            message,
+                                            detail,
+                                            matches!(error, gemini::GeminiError::Unauthorized),
+                                        )
+                                    }
+                                };
                                 applog::log(&format!("transcribe-error {message} {detail}"));
-                                if matches!(e, groq::GroqError::Unauthorized) {
+                                if unauthorized {
                                     crate::show_settings_at_key(&ui.app);
                                 }
                                 ui.show_error(my_gen, message);
@@ -228,6 +370,16 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
             }
         }
     });
+}
+
+fn refreshed_provider_key(memory: &std::sync::Mutex<String>, provider: keys::Provider) -> String {
+    let mut memory = memory.lock().unwrap();
+    let (key, changed) = keys::refreshed_key(&memory, keys::read_vault(provider));
+    if changed {
+        *memory = key.clone();
+        applog::log("selected-provider-key-refreshed-from-vault");
+    }
+    key
 }
 
 /// True when the user picked a specific device but something else is actually
@@ -241,6 +393,7 @@ fn on_fallback_device(wanted: &Option<String>, active: &Option<String>) -> bool 
     }
 }
 
+#[derive(Clone, Copy)]
 enum Formatting {
     Raw,
     Casual,
@@ -276,7 +429,11 @@ fn paste(text: &str) -> bool {
     let confirmed = clipboard::wait_pasted(PASTE_CONFIRM_TIMEOUT);
     std::thread::sleep(Duration::from_millis(250));
     clipboard::restore();
-    applog::log(if confirmed { "pasted-confirmed" } else { "paste-unconfirmed" });
+    applog::log(if confirmed {
+        "pasted-confirmed"
+    } else {
+        "paste-unconfirmed"
+    });
     // Unconfirmed after 5 s usually means the focused app ignores Ctrl+V.
     // The text WAS delivered to the clipboard mechanism, so count it as a
     // success for the pill (spec's error table has no entry for this; the
@@ -286,8 +443,26 @@ fn paste(text: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{formatting_mode, Formatting};
     use super::on_fallback_device;
+    use super::{capture_route, formatting_mode, CaptureRoute, Formatting};
+
+    #[test]
+    fn gemini_capture_streams_with_live_model_and_selected_cleanup() {
+        let route = capture_route(
+            crate::config::TranscriptionProvider::Gemini,
+            "secret".into(),
+            "gemini-3.5-transcribe-live".into(),
+            vec!["WhisperOSS".into()],
+            Formatting::Ai,
+        );
+
+        let CaptureRoute::Gemini(config) = route else {
+            panic!("Gemini recording was buffered instead of streamed");
+        };
+        assert_eq!(config.model, "gemini-3.5-transcribe-live");
+        assert_eq!(config.vocabulary, vec!["WhisperOSS"]);
+        assert!(config.smart);
+    }
 
     #[test]
     fn formatting_truth_table() {
