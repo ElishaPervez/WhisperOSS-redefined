@@ -52,6 +52,8 @@ cargo test
 | Provider API key | Stored separately for Google and Groq on this PC |
 | Transcription model | Stored separately for each provider |
 | Live preview | Streams real-time speech preview into the overlay (Gemini Live) |
+| Pre-roll buffer | Audio captured before hotkey press (100–1000 ms) to avoid clipped first words |
+| Post-roll buffer | Audio captured after hotkey release (100–1000 ms) to avoid clipped trailing words |
 | AI formatting | Cleans punctuation and paragraph breaks |
 | Casual mode | Lowercase, light emoji |
 | Microphone | Input device used while dictating |
