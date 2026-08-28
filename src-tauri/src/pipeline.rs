@@ -184,16 +184,41 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                     };
                     match capture_route(provider, key, gemini_model, vocabulary, formatting) {
                         CaptureRoute::Buffered => audio.start_recording(),
-                        CaptureRoute::Gemini(config) => match gemini_live.begin(config) {
-                            Ok(sink) => audio.start_streaming_recording(Arc::new(sink)),
-                            Err(error) => {
-                                let (message, detail) =
-                                    overlay_state::describe_gemini_error(&error);
-                                applog::log(&format!("transcribe-start-error {message} {detail}"));
-                                std::thread::spawn(move || ui.show_error(my_gen, message));
-                                continue;
+                        CaptureRoute::Gemini(config) => {
+                            let (stream_tx, stream_rx) = channel::<String>();
+                            match gemini_live.begin(config, Some(stream_tx)) {
+                                Ok(sink) => {
+                                    audio.start_streaming_recording(Arc::new(sink));
+                                    let ui_stream = Ui {
+                                        app: app.clone(),
+                                        generation: generation.clone(),
+                                    };
+                                    std::thread::spawn(move || {
+                                        let mut expanded = false;
+                                        while let Ok(text) = stream_rx.recv() {
+                                            if !ui_stream.current(my_gen) {
+                                                break;
+                                            }
+                                            let text = text.trim();
+                                            if !text.is_empty() {
+                                                if !expanded {
+                                                    expanded = true;
+                                                    ui_stream.show(my_gen, position::PILL_MAX_LOGICAL_W);
+                                                }
+                                                ui_stream.emit(my_gen, "streaming", text);
+                                            }
+                                        }
+                                    });
+                                }
+                                Err(error) => {
+                                    let (message, detail) =
+                                        overlay_state::describe_gemini_error(&error);
+                                    applog::log(&format!("transcribe-start-error {message} {detail}"));
+                                    std::thread::spawn(move || ui.show_error(my_gen, message));
+                                    continue;
+                                }
                             }
-                        },
+                        }
                     }
                     active_capture = Some(capture);
                     ui.show(my_gen, position::PILL_LOGICAL_W);
@@ -246,6 +271,7 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                         continue;
                     }
 
+                    ui.show(my_gen, position::PILL_LOGICAL_W);
                     ui.emit(my_gen, "processing", "");
                     let wav =
                         (capture.provider == config::TranscriptionProvider::Groq).then(|| {

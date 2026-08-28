@@ -34,7 +34,7 @@ pub struct LiveConfig {
 }
 
 enum LiveCommand {
-    Start(LiveConfig),
+    Start(LiveConfig, Option<std_mpsc::Sender<String>>),
     Audio(Vec<i16>, u32),
     Finish(std_mpsc::Sender<Result<String, GeminiError>>),
     Cancel,
@@ -75,9 +75,13 @@ impl GeminiLive {
         Self { tx }
     }
 
-    pub fn begin(&self, config: LiveConfig) -> Result<GeminiAudioSink, GeminiError> {
+    pub fn begin(
+        &self,
+        config: LiveConfig,
+        stream_tx: Option<std_mpsc::Sender<String>>,
+    ) -> Result<GeminiAudioSink, GeminiError> {
         self.tx
-            .blocking_send(LiveCommand::Start(config))
+            .blocking_send(LiveCommand::Start(config, stream_tx))
             .map_err(|_| GeminiError::Network("live transcription worker stopped".into()))?;
         Ok(GeminiAudioSink {
             tx: self.tx.clone(),
@@ -106,16 +110,18 @@ struct Utterance {
     end_sent: bool,
     end_sent_at: Option<Instant>,
     completion_seen_at: Option<Instant>,
+    server_turn_completed: bool,
     final_after_end: bool,
     cancelled: bool,
     retry_count: usize,
     transcript: TranscriptBuffer,
+    stream_tx: Option<std_mpsc::Sender<String>>,
     result: Option<std_mpsc::Sender<Result<String, GeminiError>>>,
     terminal_result: Option<Result<String, GeminiError>>,
 }
 
 impl Utterance {
-    fn new(config: LiveConfig) -> Self {
+    fn new(config: LiveConfig, stream_tx: Option<std_mpsc::Sender<String>>) -> Self {
         Self {
             config,
             resampler: crate::dsp::StreamingResampler::new(),
@@ -125,10 +131,12 @@ impl Utterance {
             end_sent: false,
             end_sent_at: None,
             completion_seen_at: None,
+            server_turn_completed: false,
             final_after_end: false,
             cancelled: false,
             retry_count: 0,
             transcript: TranscriptBuffer::default(),
+            stream_tx,
             result: None,
             terminal_result: None,
         }
@@ -195,7 +203,7 @@ async fn run_live_manager(
 
 fn handle_command(command: LiveCommand, queue: &mut VecDeque<Utterance>) {
     match command {
-        LiveCommand::Start(config) => queue.push_back(Utterance::new(config)),
+        LiveCommand::Start(config, stream_tx) => queue.push_back(Utterance::new(config, stream_tx)),
         LiveCommand::Audio(samples, rate) => {
             if let Some(utterance) = queue.back_mut().filter(|item| !item.end_requested) {
                 utterance
@@ -277,7 +285,11 @@ async fn pump_front(
                 } else {
                     front.end_sent = true;
                     front.end_sent_at = Some(Instant::now());
-                    front.completion_seen_at = None;
+                    front.completion_seen_at = if front.server_turn_completed {
+                        Some(Instant::now())
+                    } else {
+                        None
+                    };
                     front.final_after_end = false;
                     Some(audio_stream_end_message())
                 }
@@ -382,26 +394,45 @@ fn handle_server_message(
             let mut completed_text = None;
             let signal = if let Some(front) = queue.front_mut() {
                 let signal = front.transcript.ingest(&value);
+                let current_text = front.transcript.text();
+                if !current_text.is_empty() {
+                    if let Some(ref tx) = front.stream_tx {
+                        let _ = tx.send(current_text);
+                    }
+                }
                 if front.end_sent && final_received {
                     front.final_after_end = true;
                 }
                 match signal {
-                    ServerSignal::TurnComplete if front.end_sent => {
-                        completed_text = Some(front.transcript.text());
-                    }
-                    ServerSignal::GenerationComplete if front.end_sent => {
-                        if front.final_after_end {
+                    ServerSignal::TurnComplete => {
+                        front.server_turn_completed = true;
+                        if front.end_sent {
                             completed_text = Some(front.transcript.text());
-                        } else {
-                            front.completion_seen_at = Some(Instant::now());
                         }
                     }
-                    ServerSignal::Continue
+                    ServerSignal::GenerationComplete => {
+                        front.server_turn_completed = true;
+                        if front.end_sent {
+                            if front.final_after_end {
+                                completed_text = Some(front.transcript.text());
+                            } else {
+                                front.completion_seen_at = Some(Instant::now());
+                            }
+                        }
+                    }
+                    ServerSignal::Continue => {
+                        if value.get("serverContent")
+                            .and_then(|c| c.get("interimInputTranscription"))
+                            .is_some()
+                        {
+                            front.server_turn_completed = false;
+                        }
                         if front.end_sent
                             && final_received
-                            && front.completion_seen_at.is_some() =>
-                    {
-                        completed_text = Some(front.transcript.text());
+                            && front.completion_seen_at.is_some()
+                        {
+                            completed_text = Some(front.transcript.text());
+                        }
                     }
                     _ => {}
                 }
@@ -438,6 +469,7 @@ fn recover_or_complete(
         front.end_sent = false;
         front.end_sent_at = None;
         front.completion_seen_at = None;
+        front.server_turn_completed = false;
         front.final_after_end = false;
         front.transcript = TranscriptBuffer::default();
     } else {
@@ -449,6 +481,7 @@ fn complete_front(queue: &mut VecDeque<Utterance>, result: Result<String, Gemini
     let Some(front) = queue.front_mut() else {
         return;
     };
+    front.stream_tx = None;
     if front.cancelled {
         queue.pop_front();
     } else if let Some(sender) = front.result.take() {
@@ -843,7 +876,7 @@ mod tests {
             smart: false,
         };
         for expected in ["first result", "second result"] {
-            let sink = live.begin(config.clone()).unwrap();
+            let sink = live.begin(config.clone(), None).unwrap();
             sink.push(vec![700; 1_600], 16_000);
             let result = live
                 .finish()
@@ -853,6 +886,82 @@ mod tests {
                 .unwrap();
             assert_eq!(result, expected);
         }
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn live_manager_streams_interim_chunks() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (tcp, _) = listener.accept().unwrap();
+            let mut websocket = tokio_tungstenite::tungstenite::accept(tcp).unwrap();
+            let _ = websocket.read().unwrap();
+            websocket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    r#"{"setupComplete":{}}"#.into(),
+                ))
+                .unwrap();
+            let _ = websocket.read().unwrap();
+            websocket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    r#"{"serverContent":{"interimInputTranscription":{"text":"hello"}}}"#.into(),
+                ))
+                .unwrap();
+            let _ = websocket.read().unwrap();
+            websocket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    r#"{"serverContent":{"interimInputTranscription":{"text":"hello world"}}}"#.into(),
+                ))
+                .unwrap();
+            loop {
+                let value: serde_json::Value =
+                    serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
+                        .unwrap();
+                if value["realtime_input"]["audioStreamEnd"].as_bool() == Some(true) {
+                    break;
+                }
+            }
+            websocket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    serde_json::json!({
+                        "serverContent": {
+                            "inputTranscription": { "text": "hello world" },
+                            "turnComplete": true
+                        }
+                    })
+                    .to_string()
+                    .into(),
+                ))
+                .unwrap();
+        });
+
+        let live = GeminiLive::spawn(format!("ws://{address}/"), Duration::from_secs(2));
+        let (stream_tx, stream_rx) = std::sync::mpsc::channel();
+        let sink = live
+            .begin(
+                LiveConfig {
+                    key: "test-key".into(),
+                    model: "gemini-3.5-transcribe-live".into(),
+                    vocabulary: Vec::new(),
+                    smart: false,
+                },
+                Some(stream_tx),
+            )
+            .unwrap();
+        sink.push(vec![700; 1_600], 16_000);
+        let first = stream_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(first, "hello");
+        sink.push(vec![700; 1_600], 16_000);
+        let second = stream_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(second, "hello world");
+        let result = live
+            .finish()
+            .unwrap()
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+        assert_eq!(result, "hello world");
         server.join().unwrap();
     }
 
@@ -882,12 +991,15 @@ mod tests {
 
         let live = GeminiLive::spawn(format!("ws://{address}/"), Duration::from_millis(100));
         let sink = live
-            .begin(LiveConfig {
-                key: "test-key".into(),
-                model: "gemini-3.5-transcribe-live".into(),
-                vocabulary: Vec::new(),
-                smart: false,
-            })
+            .begin(
+                LiveConfig {
+                    key: "test-key".into(),
+                    model: "gemini-3.5-transcribe-live".into(),
+                    vocabulary: Vec::new(),
+                    smart: false,
+                },
+                None,
+            )
             .unwrap();
         sink.push(vec![700; 1_600], 16_000);
         let result = live
@@ -913,12 +1025,15 @@ mod tests {
 
         let live = GeminiLive::spawn(format!("ws://{address}/"), Duration::from_millis(200));
         let sink = live
-            .begin(LiveConfig {
-                key: "test-key".into(),
-                model: "gemini-3.5-transcribe-live".into(),
-                vocabulary: Vec::new(),
-                smart: false,
-            })
+            .begin(
+                LiveConfig {
+                    key: "test-key".into(),
+                    model: "gemini-3.5-transcribe-live".into(),
+                    vocabulary: Vec::new(),
+                    smart: false,
+                },
+                None,
+            )
             .unwrap();
         sink.push(vec![700; 1_600], 16_000);
         std::thread::sleep(Duration::from_millis(250));
@@ -951,6 +1066,74 @@ mod tests {
             client(format!("http://{addr}")).validate_key(),
             Err(GeminiError::Unauthorized)
         ));
+    }
+
+    #[test]
+    fn live_manager_completes_when_turn_completed_during_speech_pause() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (tcp, _) = listener.accept().unwrap();
+            let mut websocket = tokio_tungstenite::tungstenite::accept(tcp).unwrap();
+            let _ = websocket.read().unwrap(); // setup
+            websocket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    r#"{"setupComplete":{}}"#.into(),
+                ))
+                .unwrap();
+            let _ = websocket.read().unwrap(); // first audio chunk
+            websocket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    serde_json::json!({
+                        "serverContent": {
+                            "inputTranscription": { "text": "early finished text" },
+                            "turnComplete": true
+                        }
+                    })
+                    .to_string()
+                    .into(),
+                ))
+                .unwrap();
+            // Server receives trailing silence audio and audioStreamEnd, but sends nothing more
+            loop {
+                let msg = websocket.read().unwrap();
+                if let Ok(text) = msg.into_text() {
+                    let val: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+                    if val["realtime_input"]["audioStreamEnd"].as_bool() == Some(true) {
+                        break;
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(800));
+        });
+
+        let live = GeminiLive::spawn(format!("ws://{address}/"), Duration::from_secs(5));
+        let sink = live
+            .begin(
+                LiveConfig {
+                    key: "test-key".into(),
+                    model: "gemini-3.5-transcribe-live".into(),
+                    vocabulary: Vec::new(),
+                    smart: false,
+                },
+                None,
+            )
+            .unwrap();
+        sink.push(vec![700; 1_600], 16_000);
+        // Wait long enough for the server turnComplete to be processed while still recording
+        std::thread::sleep(Duration::from_millis(150));
+        // Push 2 more seconds of silence
+        sink.push(vec![0; 1_600], 16_000);
+        // Release key (finish)
+        let result = live
+            .finish()
+            .unwrap()
+            .recv_timeout(Duration::from_millis(800))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(result, "early finished text");
+        server.join().unwrap();
     }
 
     #[test]
@@ -988,12 +1171,15 @@ mod tests {
             .collect::<Vec<_>>();
         let live = GeminiLive::spawn(PROD_WS_URL.into(), Duration::from_secs(30));
         let sink = live
-            .begin(LiveConfig {
-                key,
-                model: crate::config::DEFAULT_GEMINI_MODEL.into(),
-                vocabulary: Vec::new(),
-                smart: false,
-            })
+            .begin(
+                LiveConfig {
+                    key,
+                    model: crate::config::DEFAULT_GEMINI_MODEL.into(),
+                    vocabulary: Vec::new(),
+                    smart: false,
+                },
+                None,
+            )
             .unwrap();
         for chunk in samples.chunks(LIVE_FRAME_SAMPLES) {
             sink.push(chunk.to_vec(), 16_000);

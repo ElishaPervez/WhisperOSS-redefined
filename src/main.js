@@ -5,11 +5,52 @@ const { invoke } = window.__TAURI__.core;
 const pill = document.getElementById("pill");
 const faces = {
   listening: document.getElementById("face-listening"),
+  streaming: document.getElementById("face-streaming"),
   processing: document.getElementById("face-processing"),
   success: document.getElementById("face-success"),
   error: document.getElementById("face-error"),
 };
 const errText = document.getElementById("err-text");
+const streamTextWrap = document.getElementById("stream-text-wrap");
+const streamText = document.getElementById("stream-text");
+
+let previousWords = [];
+function setStreamText(text) {
+  if (!text) {
+    streamText.innerHTML = "";
+    previousWords = [];
+    streamTextWrap.classList.remove("faded-left");
+    return;
+  }
+  const words = text.trim().split(/\s+/);
+  let commonCount = 0;
+  while (
+    commonCount < previousWords.length &&
+    commonCount < words.length &&
+    previousWords[commonCount] === words[commonCount]
+  ) {
+    commonCount++;
+  }
+  if (commonCount === previousWords.length && commonCount < words.length) {
+    for (let i = commonCount; i < words.length; i++) {
+      const span = document.createElement("span");
+      span.className = "word";
+      span.textContent = words[i];
+      streamText.appendChild(span);
+    }
+  } else if (commonCount !== words.length || words.length !== previousWords.length) {
+    streamText.innerHTML = "";
+    words.forEach((w, i) => {
+      const span = document.createElement("span");
+      span.className = i >= commonCount ? "word" : "";
+      span.textContent = w;
+      streamText.appendChild(span);
+    });
+  }
+  previousWords = words;
+  streamTextWrap.scrollLeft = streamTextWrap.scrollWidth;
+  streamTextWrap.classList.toggle("faded-left", streamTextWrap.scrollLeft > 4);
+}
 
 function setState(state, message) {
   pill.classList.toggle("faded", state === "hidden");
@@ -18,9 +59,14 @@ function setState(state, message) {
     el.classList.toggle("on", name === state);
   }
   if (state === "error") errText.textContent = message || "Error";
-  if (state === "listening") {
+  if (state === "streaming") {
+    setStreamText(message);
+  } else if (state === "listening") {
+    setStreamText("");
     // After the next paint, so the log line means "bars are on screen".
     requestAnimationFrame(() => invoke("overlay_visible"));
+  } else {
+    setStreamText("");
   }
 }
 
@@ -40,6 +86,17 @@ const weights = bars.map((_, i) => {
   return 0.35 + 0.65 * Math.cos((d * Math.PI) / 2);
 });
 
+// --- mini streaming waveform bars (docked on the left) ----------------
+const MINI_BAR_COUNT = 4;
+const miniBars = [];
+const streamBarsContainer = document.getElementById("stream-bars");
+for (let i = 0; i < MINI_BAR_COUNT; i++) {
+  const b = document.createElement("div");
+  b.className = "mini-bar";
+  streamBarsContainer.appendChild(b);
+  miniBars.push(b);
+}
+
 let target = 0;
 listen("level", (e) => { target = e.payload; });
 
@@ -53,6 +110,11 @@ function frame() {
   bars.forEach((b, i) => {
     const wobble = 0.85 + 0.15 * Math.sin(t * 7 + i * 1.7);
     const s = MIN + (1 - MIN) * smoothed * weights[i] * wobble;
+    b.style.transform = `scaleY(${s.toFixed(3)})`;
+  });
+  miniBars.forEach((b, i) => {
+    const wobble = 0.85 + 0.15 * Math.sin(t * 7 + i * 1.7);
+    const s = 0.25 + 0.75 * smoothed * wobble;
     b.style.transform = `scaleY(${s.toFixed(3)})`;
   });
   requestAnimationFrame(frame);
