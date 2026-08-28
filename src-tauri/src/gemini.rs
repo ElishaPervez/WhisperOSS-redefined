@@ -17,6 +17,7 @@ const LIVE_FRAME_SAMPLES: usize = 1_600;
 const LIVE_CHANNEL_CAPACITY: usize = 1_024;
 const SESSION_REFRESH_AFTER: Duration = Duration::from_secs(9 * 60);
 const FINAL_TRANSCRIPT_GRACE: Duration = Duration::from_millis(250);
+const PREWARM_RETRY_INTERVAL: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]
 pub enum GeminiError {
@@ -34,6 +35,7 @@ pub struct LiveConfig {
 }
 
 enum LiveCommand {
+    Warm(Option<LiveConfig>),
     Start(LiveConfig, Option<std_mpsc::Sender<String>>),
     Audio(Vec<i16>, u32),
     Finish(std_mpsc::Sender<Result<String, GeminiError>>),
@@ -73,6 +75,10 @@ impl GeminiLive {
             runtime.block_on(run_live_manager(rx, websocket_url, timeout));
         });
         Self { tx }
+    }
+
+    pub fn warm(&self, config: Option<LiveConfig>) {
+        let _ = self.tx.try_send(LiveCommand::Warm(config));
     }
 
     pub fn begin(
@@ -157,16 +163,53 @@ async fn run_live_manager(
 ) {
     let mut queue = VecDeque::<Utterance>::new();
     let mut session: Option<LiveSession> = None;
+    let mut warm_config: Option<LiveConfig> = None;
+    let mut last_prewarm_attempt: Option<Instant> = None;
     let mut maintenance_tick = tokio::time::interval(Duration::from_millis(25));
 
     loop {
         pump_front(&mut session, &mut queue, &websocket_url, timeout).await;
 
+        if queue.is_empty() {
+            if let Some(target) = warm_config.as_ref() {
+                if !target.key.is_empty() {
+                    let needs_refresh = session
+                        .as_ref()
+                        .map(|open| {
+                            open.config != *target
+                                || open.opened_at.elapsed() >= SESSION_REFRESH_AFTER
+                        })
+                        .unwrap_or(true);
+
+                    if needs_refresh {
+                        let can_attempt = last_prewarm_attempt
+                            .map(|t| t.elapsed() >= PREWARM_RETRY_INTERVAL)
+                            .unwrap_or(true);
+
+                        if can_attempt {
+                            session = None;
+                            last_prewarm_attempt = Some(Instant::now());
+                            if let Ok(open) = connect_live(&websocket_url, target, timeout).await {
+                                session = Some(open);
+                                last_prewarm_attempt = None;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if let Some(open) = session.as_mut() {
             tokio::select! {
                 command = commands.recv() => {
                     let Some(command) = command else { break };
-                    handle_command(command, &mut queue);
+                    handle_command(
+                        command,
+                        &mut queue,
+                        &mut warm_config,
+                        &mut session,
+                        &mut last_prewarm_attempt,
+                    );
                 }
                 message = open.socket.next() => {
                     handle_server_message(message, &mut session, &mut queue);
@@ -191,16 +234,44 @@ async fn run_live_manager(
                 }
             }
         } else {
-            let Some(command) = commands.recv().await else {
-                break;
-            };
-            handle_command(command, &mut queue);
+            tokio::select! {
+                command = commands.recv() => {
+                    let Some(command) = command else { break };
+                    handle_command(
+                        command,
+                        &mut queue,
+                        &mut warm_config,
+                        &mut session,
+                        &mut last_prewarm_attempt,
+                    );
+                }
+                _ = maintenance_tick.tick() => {}
+            }
         }
     }
 }
 
-fn handle_command(command: LiveCommand, queue: &mut VecDeque<Utterance>) {
+fn handle_command(
+    command: LiveCommand,
+    queue: &mut VecDeque<Utterance>,
+    warm_config: &mut Option<LiveConfig>,
+    session: &mut Option<LiveSession>,
+    last_prewarm_attempt: &mut Option<Instant>,
+) {
     match command {
+        LiveCommand::Warm(config) => {
+            if *warm_config != config {
+                *warm_config = config;
+                *last_prewarm_attempt = None;
+                if queue.is_empty() {
+                    if let Some(open) = session {
+                        if Some(&open.config) != warm_config.as_ref() {
+                            *session = None;
+                        }
+                    }
+                }
+            }
+        }
         LiveCommand::Start(config, stream_tx) => queue.push_back(Utterance::new(config, stream_tx)),
         LiveCommand::Audio(samples, rate) => {
             if let Some(utterance) = queue.back_mut().filter(|item| !item.end_requested) {
@@ -1292,4 +1363,166 @@ mod tests {
             .unwrap();
         assert!(!transcript.is_empty(), "Google returned no transcript");
     }
+
+    #[test]
+    fn live_manager_prewarms_connection_before_recording() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            let (tcp, _) = listener.accept().unwrap();
+            let mut websocket = tokio_tungstenite::tungstenite::accept(tcp).unwrap();
+            // 1. Should receive setup message upon pre-warming (BEFORE any begin/start call)
+            let setup: serde_json::Value =
+                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
+                    .unwrap();
+            assert_eq!(setup["setup"]["model"], "models/gemini-3.5-transcribe-live");
+            websocket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    r#"{"setupComplete":{}}"#.into(),
+                ))
+                .unwrap();
+
+            // 2. Now when begin() is called, the first message read MUST be activityStart
+            let start_msg: serde_json::Value =
+                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
+                    .unwrap();
+            assert!(start_msg["realtimeInput"]["activityStart"].is_object());
+
+            let audio_msg: serde_json::Value =
+                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
+                    .unwrap();
+            assert!(audio_msg["realtimeInput"]["audio"].is_object());
+
+            let end_msg: serde_json::Value =
+                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
+                    .unwrap();
+            assert!(end_msg["realtimeInput"]["activityEnd"].is_object());
+
+            websocket
+                .send(tokio_tungstenite::tungstenite::Message::Text(
+                    serde_json::json!({
+                        "serverContent": {
+                            "inputTranscription": { "text": "prewarmed instant text" },
+                            "turnComplete": true
+                        }
+                    })
+                    .to_string()
+                    .into(),
+                ))
+                .unwrap();
+        });
+
+        let live = GeminiLive::spawn(format!("ws://{address}/"), Duration::from_secs(2));
+        let config = LiveConfig {
+            key: "test-key".into(),
+            model: "gemini-3.5-transcribe-live".into(),
+            vocabulary: Vec::new(),
+            smart: false,
+        };
+
+        // Pre-warm the connection
+        live.warm(Some(config.clone()));
+
+        // Give a brief moment for the background prewarm handshake to complete
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Now start recording - it should use the pre-warmed connection directly
+        let sink = live.begin(config, None).unwrap();
+        sink.push(vec![700; 1_600], 16_000);
+        let result = live
+            .finish()
+            .unwrap()
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(result, "prewarmed instant text");
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn live_manager_prewarm_reconnects_when_config_changes() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = thread::spawn(move || {
+            // First connection with config 1 (smart: false)
+            let (tcp1, _) = listener.accept().unwrap();
+            let mut ws1 = tokio_tungstenite::tungstenite::accept(tcp1).unwrap();
+            let setup1: serde_json::Value =
+                serde_json::from_str(ws1.read().unwrap().into_text().unwrap().as_str()).unwrap();
+            assert_eq!(
+                setup1["setup"]["inputAudioTranscription"]["mode"],
+                serde_json::Value::Null
+            );
+            ws1.send(tokio_tungstenite::tungstenite::Message::Text(
+                r#"{"setupComplete":{}}"#.into(),
+            ))
+            .unwrap();
+
+            // Config changes to smart: true -> closes first connection and opens second
+            let (tcp2, _) = listener.accept().unwrap();
+            let mut ws2 = tokio_tungstenite::tungstenite::accept(tcp2).unwrap();
+            let setup2: serde_json::Value =
+                serde_json::from_str(ws2.read().unwrap().into_text().unwrap().as_str()).unwrap();
+            assert_eq!(
+                setup2["setup"]["inputAudioTranscription"]["mode"],
+                "SMART"
+            );
+            ws2.send(tokio_tungstenite::tungstenite::Message::Text(
+                r#"{"setupComplete":{}}"#.into(),
+            ))
+            .unwrap();
+
+            // Recording begins on ws2
+            let start_msg: serde_json::Value =
+                serde_json::from_str(ws2.read().unwrap().into_text().unwrap().as_str()).unwrap();
+            assert!(start_msg["realtimeInput"]["activityStart"].is_object());
+            let _ = ws2.read().unwrap(); // audio
+            let _ = ws2.read().unwrap(); // end
+            ws2.send(tokio_tungstenite::tungstenite::Message::Text(
+                serde_json::json!({
+                    "serverContent": {
+                        "inputTranscription": { "text": "smart formatted text" },
+                        "turnComplete": true
+                    }
+                })
+                .to_string()
+                .into(),
+            ))
+            .unwrap();
+        });
+
+        let live = GeminiLive::spawn(format!("ws://{address}/"), Duration::from_secs(2));
+        let config1 = LiveConfig {
+            key: "test-key".into(),
+            model: "gemini-3.5-transcribe-live".into(),
+            vocabulary: Vec::new(),
+            smart: false,
+        };
+
+        live.warm(Some(config1));
+        std::thread::sleep(Duration::from_millis(80));
+
+        let config2 = LiveConfig {
+            key: "test-key".into(),
+            model: "gemini-3.5-transcribe-live".into(),
+            vocabulary: Vec::new(),
+            smart: true,
+        };
+        live.warm(Some(config2.clone()));
+        std::thread::sleep(Duration::from_millis(80));
+
+        let sink = live.begin(config2, None).unwrap();
+        sink.push(vec![700; 1_600], 16_000);
+        let result = live
+            .finish()
+            .unwrap()
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(result, "smart formatted text");
+        server.join().unwrap();
+    }
 }
+

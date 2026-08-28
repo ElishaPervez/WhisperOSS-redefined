@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::audio::AudioEngine;
 use crate::config::Config;
+use crate::gemini::GeminiLive;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -20,6 +21,7 @@ pub struct AppState {
     /// Bumped whenever a dictation is superseded; a stale worker checks this
     /// before it touches the pill.
     pub generation: Arc<AtomicU64>,
+    pub gemini_live: GeminiLive,
 }
 
 impl AppState {
@@ -28,6 +30,7 @@ impl AppState {
         groq_key: String,
         gemini_key: String,
         audio: Arc<AudioEngine>,
+        gemini_live: GeminiLive,
     ) -> Self {
         AppState {
             config: Arc::new(Mutex::new(config)),
@@ -35,6 +38,7 @@ impl AppState {
             gemini_key: Arc::new(Mutex::new(gemini_key)),
             audio,
             generation: Arc::new(AtomicU64::new(0)),
+            gemini_live,
         }
     }
 }

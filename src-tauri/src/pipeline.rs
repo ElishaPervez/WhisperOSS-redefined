@@ -15,7 +15,7 @@ use crate::{
     applog, clipboard, config, dsp, gemini, groq, hook, hotkey_logic, keys, overlay_state, position,
 };
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const PASTE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(5);
 
 enum CaptureRoute {
@@ -133,7 +133,8 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
     let generation = state.generation.clone();
     let combo = combo_from_config(&state);
     apply_combo(&combo);
-    let gemini_live = gemini::GeminiLive::spawn(gemini::PROD_WS_URL.to_string(), REQUEST_TIMEOUT);
+    let gemini_live = state.gemini_live.clone();
+    sync_gemini_prewarm(&state);
 
     std::thread::spawn(move || {
         let mut tracker = hotkey_logic::HoldTracker::new(combo);
@@ -419,8 +420,31 @@ fn on_fallback_device(wanted: &Option<String>, active: &Option<String>) -> bool 
     }
 }
 
+pub fn sync_gemini_prewarm(state: &crate::state::AppState) {
+    let cfg = state.config.lock().unwrap();
+    if cfg.transcription_provider == config::TranscriptionProvider::Gemini {
+        let key = refreshed_provider_key(&state.gemini_key, keys::Provider::Gemini);
+        if !key.is_empty() {
+            let formatting = formatting_mode(cfg.use_formatter, cfg.casual_mode);
+            let model = if cfg.gemini_model == "gemini-3.5-transcribe" {
+                config::DEFAULT_GEMINI_MODEL.into()
+            } else {
+                cfg.gemini_model.clone()
+            };
+            state.gemini_live.warm(Some(gemini::LiveConfig {
+                key,
+                model,
+                vocabulary: cfg.vocabulary.clone(),
+                smart: matches!(formatting, Formatting::Ai),
+            }));
+            return;
+        }
+    }
+    state.gemini_live.warm(None);
+}
+
 #[derive(Clone, Copy)]
-enum Formatting {
+pub(crate) enum Formatting {
     Raw,
     Casual,
     Ai,
@@ -429,7 +453,7 @@ enum Formatting {
 /// Casual mode is a local rewrite and always wins: it exists for latency,
 /// so it must never trigger the AI pass even when the formatter toggle is
 /// also on. The AI cleanup pass only runs for formal formatting.
-fn formatting_mode(use_formatter: bool, casual: bool) -> Formatting {
+pub(crate) fn formatting_mode(use_formatter: bool, casual: bool) -> Formatting {
     if casual {
         Formatting::Casual
     } else if use_formatter {

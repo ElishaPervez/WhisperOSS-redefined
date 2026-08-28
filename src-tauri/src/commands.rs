@@ -4,7 +4,7 @@
 
 use tauri::{Manager, State};
 
-use crate::{applog, audio, autostart, config, gemini, groq, keys, state::AppState};
+use crate::{applog, audio, autostart, config, gemini, groq, keys, pipeline, state::AppState};
 
 /// Only three themes are valid; anything else falls back to "auto".
 pub fn normalize_theme(value: &str) -> String {
@@ -57,6 +57,7 @@ pub fn set_transcription_provider(state: State<AppState>, value: String) {
     };
     state.config.lock().unwrap().transcription_provider = provider;
     persist(&state);
+    pipeline::sync_gemini_prewarm(&state);
     applog::log("setting-transcription-provider-changed");
 }
 
@@ -83,6 +84,7 @@ pub fn set_provider_model(state: State<AppState>, provider: String, value: Strin
     }
     drop(cfg);
     persist(&state);
+    pipeline::sync_gemini_prewarm(&state);
     applog::log("setting-transcription-model-changed");
 }
 
@@ -90,6 +92,7 @@ pub fn set_provider_model(state: State<AppState>, provider: String, value: Strin
 pub fn set_formatter(state: State<AppState>, value: bool) {
     state.config.lock().unwrap().use_formatter = value;
     persist(&state);
+    pipeline::sync_gemini_prewarm(&state);
     applog::log("setting-formatter-changed");
 }
 
@@ -97,6 +100,7 @@ pub fn set_formatter(state: State<AppState>, value: bool) {
 pub fn set_casual(state: State<AppState>, value: bool) {
     state.config.lock().unwrap().casual_mode = value;
     persist(&state);
+    pipeline::sync_gemini_prewarm(&state);
     applog::log("setting-casual-changed");
 }
 
@@ -130,6 +134,7 @@ fn sanitize_vocabulary(value: Vec<String>) -> Vec<String> {
 pub fn set_vocabulary(state: State<AppState>, value: Vec<String>) {
     state.config.lock().unwrap().vocabulary = sanitize_vocabulary(value);
     persist(&state);
+    pipeline::sync_gemini_prewarm(&state);
     applog::log("setting-vocabulary-changed");
 }
 
@@ -205,6 +210,7 @@ fn save_key(
                         return Err("Couldn't save to Credential Manager".into());
                     }
                     *state.gemini_key.lock().unwrap() = key;
+                    pipeline::sync_gemini_prewarm(state);
                     Ok(())
                 }
                 Err(gemini::GeminiError::Unauthorized) => Err("Google rejected this key".into()),

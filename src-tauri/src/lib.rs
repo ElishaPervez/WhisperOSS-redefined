@@ -107,11 +107,14 @@ pub fn run() {
             let gemini_key = keys::load(keys::Provider::Gemini).unwrap_or_default();
             let audio_engine =
                 audio::AudioEngine::start(app.handle().clone(), cfg.input_device.clone());
+            let gemini_live =
+                gemini::GeminiLive::spawn(gemini::PROD_WS_URL.to_string(), pipeline::REQUEST_TIMEOUT);
             let app_state = state::AppState::new(
                 cfg.clone(),
                 groq_key.clone(),
                 gemini_key.clone(),
                 audio_engine,
+                gemini_live,
             );
             app.manage(app_state.clone());
 
