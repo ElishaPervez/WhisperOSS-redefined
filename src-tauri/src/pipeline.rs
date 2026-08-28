@@ -144,7 +144,7 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
             match tracker.on_event(ev) {
                 hotkey_logic::Action::None => {}
                 hotkey_logic::Action::Start => {
-                    let (provider, formatting, vocabulary, groq_model, gemini_model) = {
+                    let (provider, formatting, vocabulary, groq_model, gemini_model, show_live_transcript) = {
                         let cfg = state.config.lock().unwrap();
                         (
                             cfg.transcription_provider,
@@ -152,6 +152,7 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                             cfg.vocabulary.clone(),
                             cfg.groq_model.clone(),
                             cfg.gemini_model.clone(),
+                            cfg.show_live_transcript,
                         )
                     };
                     let key = match provider {
@@ -186,30 +187,37 @@ pub fn start(app: tauri::AppHandle, state: crate::state::AppState) {
                     match capture_route(provider, key, gemini_model, vocabulary, formatting) {
                         CaptureRoute::Buffered => audio.start_recording(),
                         CaptureRoute::Gemini(config) => {
-                            let (stream_tx, stream_rx) = channel::<String>();
-                            match gemini_live.begin(config, Some(stream_tx)) {
+                            let (stream_tx, stream_rx) = if show_live_transcript {
+                                let (tx, rx) = channel::<String>();
+                                (Some(tx), Some(rx))
+                            } else {
+                                (None, None)
+                            };
+                            match gemini_live.begin(config, stream_tx) {
                                 Ok(sink) => {
                                     audio.start_streaming_recording(Arc::new(sink));
-                                    let ui_stream = Ui {
-                                        app: app.clone(),
-                                        generation: generation.clone(),
-                                    };
-                                    std::thread::spawn(move || {
-                                        let mut expanded = false;
-                                        while let Ok(text) = stream_rx.recv() {
-                                            if !ui_stream.current(my_gen) {
-                                                break;
-                                            }
-                                            let text = text.trim();
-                                            if !text.is_empty() {
-                                                if !expanded {
-                                                    expanded = true;
-                                                    ui_stream.show(my_gen, position::PILL_MAX_LOGICAL_W);
+                                    if let Some(stream_rx) = stream_rx {
+                                        let ui_stream = Ui {
+                                            app: app.clone(),
+                                            generation: generation.clone(),
+                                        };
+                                        std::thread::spawn(move || {
+                                            let mut expanded = false;
+                                            while let Ok(text) = stream_rx.recv() {
+                                                if !ui_stream.current(my_gen) {
+                                                    break;
                                                 }
-                                                ui_stream.emit(my_gen, "streaming", text);
+                                                let text = text.trim();
+                                                if !text.is_empty() {
+                                                    if !expanded {
+                                                        expanded = true;
+                                                        ui_stream.show(my_gen, position::PILL_MAX_LOGICAL_W);
+                                                    }
+                                                    ui_stream.emit(my_gen, "streaming", text);
+                                                }
                                             }
-                                        }
-                                    });
+                                        });
+                                    }
                                 }
                                 Err(error) => {
                                     let (message, detail) =

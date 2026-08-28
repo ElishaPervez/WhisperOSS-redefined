@@ -41,6 +41,7 @@ pub fn run() {
             commands::set_provider_model,
             commands::set_formatter,
             commands::set_casual,
+            commands::set_show_live_transcript,
             commands::set_theme,
             commands::set_vocabulary,
             commands::set_autostart,

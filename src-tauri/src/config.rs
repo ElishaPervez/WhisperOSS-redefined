@@ -45,6 +45,8 @@ pub struct Config {
     pub transcription_provider: TranscriptionProvider,
     pub groq_model: String,
     pub gemini_model: String,
+    /// Shows interim transcribed text on the overlay pill while speaking (Google).
+    pub show_live_transcript: bool,
 }
 
 impl Default for Config {
@@ -60,6 +62,7 @@ impl Default for Config {
             transcription_provider: TranscriptionProvider::Groq,
             groq_model: DEFAULT_GROQ_MODEL.into(),
             gemini_model: DEFAULT_GEMINI_MODEL.into(),
+            show_live_transcript: true,
         }
     }
 }
@@ -114,6 +117,7 @@ mod tests {
         assert_eq!(c.groq_model, DEFAULT_GROQ_MODEL);
         assert_eq!(c.gemini_model, DEFAULT_GEMINI_MODEL);
         assert_eq!(c.gemini_model, "gemini-3.5-transcribe-live");
+        assert!(c.show_live_transcript);
     }
 
     #[test]
@@ -125,6 +129,7 @@ mod tests {
         assert!(c.vocabulary.is_empty());
         assert_eq!(c.transcription_provider, TranscriptionProvider::Groq);
         assert_eq!(c.gemini_model, DEFAULT_GEMINI_MODEL);
+        assert!(c.show_live_transcript);
     }
 
     #[test]
@@ -143,6 +148,7 @@ mod tests {
         );
 
         assert_eq!(c.gemini_model, "gemini-3.5-transcribe-live");
+        assert!(c.show_live_transcript);
     }
 
     #[test]
@@ -153,6 +159,7 @@ mod tests {
         c.vocabulary = vec!["Codex".into(), "Claude Code".into()];
         c.transcription_provider = TranscriptionProvider::Gemini;
         c.gemini_model = "gemini-test-model".into();
+        c.show_live_transcript = false;
         assert_eq!(from_json(&to_json(&c)), c);
     }
 }

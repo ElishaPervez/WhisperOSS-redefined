@@ -105,6 +105,13 @@ pub fn set_casual(state: State<AppState>, value: bool) {
 }
 
 #[tauri::command]
+pub fn set_show_live_transcript(state: State<AppState>, value: bool) {
+    state.config.lock().unwrap().show_live_transcript = value;
+    persist(&state);
+    applog::log("setting-show-live-transcript-changed");
+}
+
+#[tauri::command]
 pub fn set_theme(state: State<AppState>, value: String) {
     state.config.lock().unwrap().theme = normalize_theme(&value);
     persist(&state);

@@ -171,6 +171,7 @@ async function refreshMic() {
 
 async function load() {
   const cfg = await invoke("get_settings");
+  paintToggle(el("live-transcript"), cfg.show_live_transcript);
   paintToggle(el("formatter"), cfg.use_formatter);
   paintToggle(el("casual"), cfg.casual_mode);
   paintToggle(el("autostart"), cfg.run_on_startup);
@@ -202,6 +203,7 @@ function wireToggle(id, command) {
     await invoke(command, { value: next });
   };
 }
+wireToggle("live-transcript", "set_show_live_transcript");
 wireToggle("formatter", "set_formatter");
 wireToggle("casual", "set_casual");
 wireToggle("autostart", "set_autostart");
