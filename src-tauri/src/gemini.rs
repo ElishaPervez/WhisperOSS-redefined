@@ -13,7 +13,7 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 
 pub const PROD_BASE_URL: &str = "https://generativelanguage.googleapis.com";
 pub const PROD_WS_URL: &str = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
-const LIVE_FRAME_SAMPLES: usize = 1_600;
+const LIVE_FRAME_SAMPLES: usize = 640; // 40 ms at 16 kHz
 const LIVE_CHANNEL_CAPACITY: usize = 1_024;
 const SESSION_REFRESH_AFTER: Duration = Duration::from_secs(9 * 60);
 const FINAL_TRANSCRIPT_GRACE: Duration = Duration::from_millis(250);
@@ -902,7 +902,7 @@ mod tests {
                     }
                 }
                 assert!(activity_started);
-                assert_eq!(audio_frames, 1);
+                assert!(audio_frames >= 1);
                 if index == 0 {
                     websocket
                         .send(tokio_tungstenite::tungstenite::Message::Binary(
@@ -1269,17 +1269,20 @@ mod tests {
                     .unwrap();
             assert!(start_msg["realtimeInput"]["activityStart"].is_object());
 
-            // 2. Audio chunks
-            let audio_msg: serde_json::Value =
-                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
-                    .unwrap();
-            assert!(audio_msg["realtimeInput"]["audio"]["data"].is_string());
-
-            // 3. ActivityEnd
-            let end_msg: serde_json::Value =
-                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
-                    .unwrap();
-            assert!(end_msg["realtimeInput"]["activityEnd"].is_object());
+            // 2. Audio chunks until activityEnd
+            let mut audio_chunks = 0;
+            loop {
+                let msg: serde_json::Value =
+                    serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
+                        .unwrap();
+                if msg["realtimeInput"]["audio"].is_object() {
+                    audio_chunks += 1;
+                }
+                if msg["realtimeInput"]["activityEnd"].is_object() {
+                    break;
+                }
+            }
+            assert!(audio_chunks >= 1);
 
             // Respond with full finalized transcript
             websocket
@@ -1388,15 +1391,19 @@ mod tests {
                     .unwrap();
             assert!(start_msg["realtimeInput"]["activityStart"].is_object());
 
-            let audio_msg: serde_json::Value =
-                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
-                    .unwrap();
-            assert!(audio_msg["realtimeInput"]["audio"].is_object());
-
-            let end_msg: serde_json::Value =
-                serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
-                    .unwrap();
-            assert!(end_msg["realtimeInput"]["activityEnd"].is_object());
+            let mut audio_chunks = 0;
+            loop {
+                let msg: serde_json::Value =
+                    serde_json::from_str(websocket.read().unwrap().into_text().unwrap().as_str())
+                        .unwrap();
+                if msg["realtimeInput"]["audio"].is_object() {
+                    audio_chunks += 1;
+                }
+                if msg["realtimeInput"]["activityEnd"].is_object() {
+                    break;
+                }
+            }
+            assert!(audio_chunks >= 1);
 
             websocket
                 .send(tokio_tungstenite::tungstenite::Message::Text(
@@ -1477,8 +1484,19 @@ mod tests {
             let start_msg: serde_json::Value =
                 serde_json::from_str(ws2.read().unwrap().into_text().unwrap().as_str()).unwrap();
             assert!(start_msg["realtimeInput"]["activityStart"].is_object());
-            let _ = ws2.read().unwrap(); // audio
-            let _ = ws2.read().unwrap(); // end
+            let mut audio_chunks = 0;
+            loop {
+                let msg: serde_json::Value =
+                    serde_json::from_str(ws2.read().unwrap().into_text().unwrap().as_str())
+                        .unwrap();
+                if msg["realtimeInput"]["audio"].is_object() {
+                    audio_chunks += 1;
+                }
+                if msg["realtimeInput"]["activityEnd"].is_object() {
+                    break;
+                }
+            }
+            assert!(audio_chunks >= 1);
             ws2.send(tokio_tungstenite::tungstenite::Message::Text(
                 serde_json::json!({
                     "serverContent": {
