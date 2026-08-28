@@ -13,24 +13,30 @@ use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use windows::core::PCWSTR;
-use windows::Win32::Foundation::{HANDLE, HGLOBAL, HWND, LPARAM, LRESULT, WPARAM};
+use windows::core::{PCWSTR, PWSTR};
+use windows::Win32::Foundation::{
+    CloseHandle, GetLastError, HANDLE, HGLOBAL, HWND, LPARAM, LRESULT, WPARAM,
+};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData,
-    GetClipboardOwner, OpenClipboard, RegisterClipboardFormatW, SetClipboardData,
+    GetClipboardOwner, GetOpenClipboardWindow, OpenClipboard, RegisterClipboardFormatW,
+    SetClipboardData,
 };
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Memory::{
     GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE,
 };
-use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::Threading::{
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
+};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
     KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_CONTROL, VK_V,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW,
-    PostMessageW, RegisterClassW, HWND_MESSAGE, MSG, WINDOW_EX_STYLE,
-    WINDOW_STYLE, WM_APP, WM_RENDERFORMAT, WNDCLASSW,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClassNameW, GetForegroundWindow,
+    GetMessageW, GetWindowTextW, GetWindowThreadProcessId, PostMessageW, RegisterClassW,
+    HWND_MESSAGE, MSG, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_RENDERFORMAT, WNDCLASSW,
 };
 
 use crate::applog;
@@ -48,6 +54,73 @@ static OWNER_HWND: AtomicIsize = AtomicIsize::new(0);
 
 pub fn to_utf16z(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+pub fn describe_window(hwnd: HWND) -> String {
+    if hwnd.0.is_null() {
+        return "none".to_string();
+    }
+    let mut pid = 0u32;
+    unsafe {
+        let _ = GetWindowThreadProcessId(hwnd, Some(&mut pid));
+    }
+    let mut title_buf = [0u16; 128];
+    let title_len = unsafe { GetWindowTextW(hwnd, &mut title_buf) };
+    let title = if title_len > 0 {
+        String::from_utf16_lossy(&title_buf[..title_len as usize])
+    } else {
+        String::new()
+    };
+    let mut class_buf = [0u16; 64];
+    let class_len = unsafe { GetClassNameW(hwnd, &mut class_buf) };
+    let class_name = if class_len > 0 {
+        String::from_utf16_lossy(&class_buf[..class_len as usize])
+    } else {
+        String::new()
+    };
+    let exe = if pid != 0 {
+        unsafe {
+            if let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+                let mut path_buf = [0u16; 512];
+                let mut size = path_buf.len() as u32;
+                let res = QueryFullProcessImageNameW(
+                    handle,
+                    PROCESS_NAME_FORMAT(0),
+                    PWSTR(path_buf.as_mut_ptr()),
+                    &mut size,
+                );
+                let _ = CloseHandle(handle);
+                if res.is_ok() && size > 0 {
+                    let full_path = String::from_utf16_lossy(&path_buf[..size as usize]);
+                    std::path::Path::new(&full_path)
+                        .file_name()
+                        .map(|f| f.to_string_lossy().to_string())
+                        .unwrap_or(full_path)
+                } else {
+                    format!("pid-{pid}")
+                }
+            } else {
+                format!("pid-{pid}(access-denied)")
+            }
+        }
+    } else {
+        "no-pid".to_string()
+    };
+    format!("hwnd={:?} pid={} exe={:?} class={:?} title={:?}", hwnd.0, pid, exe, class_name, title)
+}
+
+pub fn describe_clipboard_blocker(context: &str, last_err: u32) -> String {
+    let open_hwnd = unsafe { GetOpenClipboardWindow().unwrap_or_default() };
+    let owner_hwnd = unsafe { GetClipboardOwner().unwrap_or_default() };
+    let fg_hwnd = unsafe { GetForegroundWindow() };
+
+    let open_info = describe_window(open_hwnd);
+    let owner_info = describe_window(owner_hwnd);
+    let fg_info = describe_window(fg_hwnd);
+
+    format!(
+        "clipboard-lock-failed ctx={context} win32_err={last_err} open_window=({open_info}) owner_window=({owner_info}) foreground=({fg_info})"
+    )
 }
 
 const CF_DIB: u32 = 8;
@@ -101,30 +174,46 @@ unsafe fn set_privacy_formats() -> bool {
         let wname = to_utf16z(name);
         let id = RegisterClipboardFormatW(PCWSTR(wname.as_ptr()));
         if id == 0 {
+            let err = GetLastError().0;
+            let msg = format!("privacy-format-reg-failed name={name} win32_err={err}");
+            applog::log(&msg);
+            eprintln!("[WhisperOSS Clipboard Warning] {msg}");
             return false;
         }
-        let Ok(hmem) = GlobalAlloc(GMEM_MOVEABLE, 4) else { return false };
+        let Ok(hmem) = GlobalAlloc(GMEM_MOVEABLE, 4) else {
+            applog::log(&format!("privacy-format-alloc-failed name={name}"));
+            return false;
+        };
         let ptr = GlobalLock(hmem);
         if ptr.is_null() {
+            applog::log(&format!("privacy-format-lock-failed name={name}"));
             return false;
         }
         std::ptr::copy_nonoverlapping(value.to_le_bytes().as_ptr(), ptr as *mut u8, 4);
         let _ = GlobalUnlock(hmem);
-        if SetClipboardData(id, Some(HANDLE(hmem.0))).is_err() {
+        if let Err(err) = SetClipboardData(id, Some(HANDLE(hmem.0))) {
+            let msg = format!("privacy-format-set-failed name={name} win32_err={err}");
+            applog::log(&msg);
+            eprintln!("[WhisperOSS Clipboard Warning] {msg}");
             return false;
         }
     }
     true
 }
 
-unsafe fn open_clipboard_retrying(hwnd: HWND) -> bool {
+unsafe fn open_clipboard_retrying(hwnd: Option<HWND>, context: &str) -> bool {
     // Another app may hold the clipboard briefly; retry 60 x 10 ms (as v1).
+    let mut last_err = 0u32;
     for _ in 0..60 {
-        if OpenClipboard(Some(hwnd)).is_ok() {
+        if OpenClipboard(hwnd).is_ok() {
             return true;
         }
+        last_err = GetLastError().0;
         std::thread::sleep(Duration::from_millis(10));
     }
+    let diag = describe_clipboard_blocker(context, last_err);
+    applog::log(&diag);
+    eprintln!("[WhisperOSS Clipboard Error] {diag}");
     false
 }
 
@@ -141,16 +230,22 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
         }
         WM_STAGE => {
             let ok = 'stage: {
-                if !open_clipboard_retrying(hwnd) {
+                if !open_clipboard_retrying(Some(hwnd), "stage") {
                     break 'stage false;
                 }
-                let ok = EmptyClipboard().is_ok()
-                    // NULL handle = delayed rendering. The call reports an
-                    // error for NULL by design — ignore its return value.
-                    && { let _ = SetClipboardData(CF_UNICODETEXT, None); true }
-                    && set_privacy_formats();
+                let empty_ok = EmptyClipboard().is_ok();
+                if !empty_ok {
+                    let err = GetLastError().0;
+                    let msg = format!("stage-empty-clipboard-failed win32_err={err}");
+                    applog::log(&msg);
+                    eprintln!("[WhisperOSS Clipboard Warning] {msg}");
+                }
+                // NULL handle = delayed rendering. The call reports an
+                // error for NULL by design — ignore its return value.
+                let _ = SetClipboardData(CF_UNICODETEXT, None);
+                let priv_ok = set_privacy_formats();
                 let _ = CloseClipboard();
-                ok
+                empty_ok && priv_ok
             };
             STAGE_OK.store(ok, Ordering::SeqCst);
             STAGE_DONE.store(true, Ordering::SeqCst);
@@ -161,10 +256,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
             if owner.0 as isize != OWNER_HWND.load(Ordering::SeqCst) {
                 // Someone else owns the clipboard now (user copied something
                 // since our paste) — leave it alone.
-                applog::log("clipboard-restore-skipped-not-owner");
+                let owner_info = describe_window(owner);
+                applog::log(&format!("clipboard-restore-skipped-not-owner current_owner=({owner_info})"));
                 return LRESULT(0);
             }
-            if open_clipboard_retrying(hwnd) {
+            if open_clipboard_retrying(Some(hwnd), "restore") {
                 let _ = EmptyClipboard();
                 if let Some(snap) = RESTORE_TO.lock().unwrap().take() {
                     for (format, bytes) in &snap.entries {
@@ -247,8 +343,7 @@ unsafe fn read_format(format: u32) -> Option<Vec<u8>> {
 /// nothing we can put back. An oversized clipboard keeps only its text.
 pub fn snapshot() -> Option<Snapshot> {
     unsafe {
-        let hwnd = HWND(OWNER_HWND.load(Ordering::SeqCst) as *mut _);
-        if !open_clipboard_retrying(hwnd) {
+        if !open_clipboard_retrying(None, "snapshot") {
             return None;
         }
         let mut entries: Vec<(u32, Vec<u8>)> = Vec::new();
@@ -292,11 +387,20 @@ pub fn stage(text: &str, restore_to: Option<Snapshot>) -> bool {
     let deadline = Instant::now() + Duration::from_secs(2);
     while !STAGE_DONE.load(Ordering::SeqCst) {
         if Instant::now() > deadline {
+            let msg = "paste-aborted-stage-wndproc-timeout-2s";
+            applog::log(msg);
+            eprintln!("[WhisperOSS Clipboard Error] {msg}");
             return false;
         }
         std::thread::sleep(Duration::from_millis(5));
     }
-    STAGE_OK.load(Ordering::SeqCst)
+    let ok = STAGE_OK.load(Ordering::SeqCst);
+    if !ok {
+        let msg = "paste-aborted-stage-flag-false";
+        applog::log(msg);
+        eprintln!("[WhisperOSS Clipboard Error] {msg}");
+    }
+    ok
 }
 
 /// True once the target app has actually pulled our text (WM_RENDERFORMAT).
@@ -370,5 +474,14 @@ mod tests {
         assert!(!should_snapshot(14));     // enhanced metafile
         assert!(!should_snapshot(16));     // locale — synthesized
         assert!(!should_snapshot(0x0083)); // owner-display range
+    }
+
+    #[test]
+    fn test_clipboard_lifecycle() {
+        init();
+        let snap = snapshot();
+        let staged = stage("hello test", snap);
+        assert!(staged, "Delayed rendering stage should succeed");
+        restore();
     }
 }
